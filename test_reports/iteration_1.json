@@ -1,0 +1,51 @@
+{
+  "summary": "First full E2E run of the BPO RPI Calling Module (simulation mode). Backend: 16/16 pytest tests pass, covering campaign CRUD, CSV validation (blank name, invalid phone, duplicate in file, extension, DNC, duplicate already in campaign, missing phone header), import, simulated launch through to completion, LLM classification (Claude Sonnet 4.5 reasoning returned, no fallback to rules), filters, export CSV, retry (default, selected, retry-limit skip), pause, campaign PATCH + guardrail flags, settings masking and live-mode guard, webhook 401 + idempotency (3 callbacks -> 1 finalize + 2 duplicate_callback_ignored), and audit filter. Frontend: create campaign, upload dialog (header error, validation summary, import), launch->completed, KPI cards, disposition/status/language/search filters, call detail drawer (attempts, transcript, classifier reasoning, timestamps), export download, retry default + checkbox-selected retry, pause/resume, Voice & script dialog + prompt-flags warning, settings save/persist/masked key/live-mode 400 toast, and audit log filter were all exercised. Found and fixed 2 frontend bugs: (1) the Voice & script dialog wiped the user's edits every 3s, (2) the audit event filter didn't apply until the next 5s poll.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/campaigns/{id}/retry", "issue": "Retry with contact_ids re-dials contacts that are already RPI_CONFIRMED and overwrites the confirmed disposition (observed: a confirmed contact became WRONG_PARTY after a selected retry). Consider excluding RPI_CONFIRMED or asking the user to confirm first."},
+      {"endpoint": "POST /api/campaigns/{id}/retry", "issue": "Retry sets the campaign status to 'running' even when it was paused, which silently overrides an operator's pause."},
+      {"endpoint": "PUT /api/settings", "issue": "DNC numbers are only stripped, not normalised to E.164. A number entered as '(416) 555-0100' will never match the normalised contact phones, so it isn't blocked."},
+      {"endpoint": "PUT /api/settings (audit)", "issue": "The frontend sends the whole settings object, so every settings_updated audit entry lists all fields as changed. Only diff the fields that actually changed."},
+      {"endpoint": "POST /api/campaigns", "issue": "voice_gender isn't validated on create (PATCH does validate it)."},
+      {"endpoint": "POST /api/vapi/webhook", "issue": "If metadata.attempt_id isn't a valid ObjectId, oid() raises a 404 instead of returning {ignored}."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CampaignFormDialog (Voice & script)", "issue": "FIXED: useEffect depended on the `campaign` object, which the 3s poll replaces, so the form reset while the user was editing and saving sent the old values. Changed the dependency to [open, campaign?.id].", "selector": "[data-testid='campaign-form-dialog']", "priority": "HIGH"},
+      {"component": "AuditPage", "issue": "FIXED: changing the event filter didn't trigger a reload, so results only updated on the next 5s poll. Added useEffect(reload) on event change.", "selector": "[data-testid='audit-log-filter-event']", "priority": "MEDIUM"},
+      {"component": "usePoll / CampaignDetailPage filters", "issue": "Intermittent race: responses can arrive out of order and an older poll can overwrite a newer filter's result. Seen once: the RPI_CONFIRMED tab showed all 4 rows for about 1s. Needs a request-sequence guard or AbortController in usePoll.", "selector": "[data-testid='filter-disposition-RPI_CONFIRMED']", "priority": "LOW"},
+      {"component": "SettingsPage live switch", "issue": "When saving live mode without credentials fails with a 400, the switch stays ON and the label says 'Live calling (Vapi)' while the server is still in simulation. Revert the local state on error.", "selector": "[data-testid='settings-live-mode-switch']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings - Vapi credentials", "issues": ["Once the webhook URL row is shown, the long URL widens the right grid column past the max-w-5xl container, so inputs extend about 120px beyond the section edge. Add min-w-0 to the grid child/flex container so `truncate` works."]},
+      {"screen": "Audit log", "issues": ["Long settings_updated details overflow horizontally because the table cell doesn't wrap."]},
+      {"screen": "Top bar", "issues": ["The 'N running · N on call' indicator polls every 8s, so it lags behind campaign state (it showed '1 running · 1 on call' after the campaign had completed)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_rpi_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Add a stale-response guard to usePoll (request id or AbortController)",
+    "Revert the settings live-mode switch locally when the save returns an error",
+    "Fix the Settings webhook URL overflow (min-w-0 / overflow-hidden on the section column)",
+    "Decide whether selected retry may re-dial RPI_CONFIRMED contacts, and whether retry should resume a paused campaign",
+    "Normalise DNC numbers to E.164 on save",
+    "Validate voice_gender on campaign create"
+  ],
+  "critical_code_review_comments": [
+    "call_service.worker_tick: 'active' counts calling contacts across all campaigns (a global concurrency cap). That's fine, but contacts stuck in 'calling' whose live attempt errored without finalising would hold capacity forever. The startup recovery only handles simulation attempts.",
+    "export_contacts runs N+1 queries for transcripts. Fine for an MVP, but slow at 10k rows.",
+    "list_contacts doesn't check that the campaign exists and returns [] for a bad id.",
+    "sanitize_name strips digits, so names like 'TEST_PU0 Person' collapse to the same displayed name. That's by design, but users should be aware of it."
+  ],
+  "updated_files": ["/app/frontend/src/components/rpi/CampaignFormDialog.jsx", "/app/frontend/src/pages/AuditPage.jsx", "/app/backend/tests/test_rpi_api.py"],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "~92% (all core flows pass after the 2 fixes; minor issues remain)"},
+  "test_credentials": "No auth. /app/memory/test_credentials.md is a template with no credentials, which is expected.",
+  "seed_data_creation": "All TEST_ campaigns, contacts and attempts were deleted after testing. Settings were restored: simulation mode, max_retries=2, empty DNC, original prompt, test Vapi key cleared. webhook_base_url is now saved, because the Settings page saves the default backend URL.",
+  "playbook_testing": "N/A. The app has no 'Jev' route. LLM classification was verified directly instead: dispositions came from source=llm with reasoning and confidence, with no fallback to rules.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/test_rpi_api.py` (xdist loadscope keeps the module on one worker, so tests run in order; takes about 70s). The webhook idempotency test inserts a fake live attempt directly into Mongo. Leave settings in simulation mode. The CampaignFormDialog and AuditPage fixes were verified in the UI."
+}

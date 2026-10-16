@@ -23,7 +23,8 @@ export const CampaignFormDialog = ({ open, onOpenChange, campaign, onSaved }) =>
       api.get("/settings").then(({ data }) => setForm({ name: "", description: "", language: data.default_language,
         voice_gender: data.default_voice_gender, voice_id: "", prompt: data.default_prompt }));
     }
-  }, [open, campaign]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, campaign?.id]);
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v?.target ? v.target.value : v }));
 

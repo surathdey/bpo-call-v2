@@ -10,7 +10,7 @@ const NAV = [
 ];
 
 const ModeIndicator = () => {
-  const { data } = usePoll(() => api.get("/dashboard").then((r) => r.data), 8000);
+  const { data } = usePoll(() => api.get("/dashboard").then((r) => r.data), 3000);
   if (!data) return null;
   const live = data.call_mode === "live";
   return (

@@ -23,12 +23,15 @@ export function usePoll(fetcher, interval = 0) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const ref = useRef(fetcher);
+  const seq = useRef(0);
   ref.current = fetcher;
   const reload = useCallback(async () => {
+    const id = ++seq.current;
     try {
-      setData(await ref.current());
+      const result = await ref.current();
+      if (id === seq.current) setData(result);
     } finally {
-      setLoading(false);
+      if (id === seq.current) setLoading(false);
     }
   }, []);
   useEffect(() => {

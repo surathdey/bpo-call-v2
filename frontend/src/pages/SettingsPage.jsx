@@ -15,7 +15,7 @@ const Section = ({ title, desc, children, testId }) => (
       <h2 className="font-display text-base font-semibold text-slate-100">{title}</h2>
       <p className="mt-1 text-sm text-slate-500">{desc}</p>
     </div>
-    <div className="space-y-4">{children}</div>
+    <div className="min-w-0 space-y-4">{children}</div>
   </section>
 );
 
@@ -51,7 +51,11 @@ export default function SettingsPage() {
       const { data } = await api.put("/settings", payload);
       load(data); setApiKey("");
       toast.success("Settings saved");
-    } catch (e) { toast.error(errMsg(e)); } finally { setSaving(false); }
+    } catch (e) {
+      toast.error(errMsg(e));
+      const { data } = await api.get("/settings");
+      setS((p) => ({ ...p, call_mode: data.call_mode }));
+    } finally { setSaving(false); }
   };
 
   const test = async () => {

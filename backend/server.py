@@ -21,7 +21,8 @@ load_dotenv(ROOT_DIR / ".env")
 
 from models import (DISPOSITIONS, AuditLog, CallAttempt, Campaign, CampaignCreate, CampaignUpdate,  # noqa: E402
                     Contact, RetryRequest, Settings, SettingsUpdate, now_iso)
-from rpi_engine import LANGUAGES, build_system_prompt, sanitize_prompt, script_lines, validate_csv  # noqa: E402
+from rpi_engine import (LANGUAGES, build_system_prompt, normalize_phone, sanitize_prompt,  # noqa: E402
+                        script_lines, validate_csv)
 import call_service as cs  # noqa: E402
 
 client = AsyncIOMotorClient(os.environ["MONGO_URL"])
@@ -101,9 +102,13 @@ async def update_settings(body: SettingsUpdate):
     if changes.get("call_mode") not in (None, "simulation", "live"):
         raise HTTPException(400, "call_mode must be 'simulation' or 'live'")
     if "dnc_numbers" in changes:
-        changes["dnc_numbers"] = sorted({n.strip() for n in changes["dnc_numbers"] if n.strip()})
+        region = changes.get("default_region") or s.default_region
+        changes["dnc_numbers"] = sorted({normalize_phone(n, region)[0] or n.strip()
+                                         for n in changes["dnc_numbers"] if n.strip()})
     if "voice_profiles" in changes:
         changes["voice_profiles"] = [vp.model_dump() for vp in body.voice_profiles]
+    current = s.model_dump()
+    changes = {k: v for k, v in changes.items() if current.get(k) != v}
     if key:
         changes["vapi_api_key_encrypted"] = cs.encrypt(key.strip())
         changes["vapi_api_key_last4"] = key.strip()[-4:]
@@ -171,6 +176,8 @@ async def create_campaign(body: CampaignCreate):
     lang = body.language or s.default_language
     if lang not in LANGUAGES:
         raise HTTPException(400, "Unsupported language")
+    if body.voice_gender not in (None, "male", "female"):
+        raise HTTPException(400, "voice_gender must be male or female")
     c = Campaign(name=body.name.strip(), description=body.description, language=lang,
                  voice_gender=body.voice_gender or s.default_voice_gender, voice_id=body.voice_id.strip(),
                  prompt=body.prompt if body.prompt is not None else s.default_prompt)
@@ -300,6 +307,7 @@ async def retry_contacts(campaign_id: str, body: RetryRequest):
     query = {"campaign_id": c.id, "status": "completed"}
     if body.contact_ids:
         query["_id"] = {"$in": [oid(i) for i in body.contact_ids]}
+        query["disposition"] = {"$ne": "RPI_CONFIRMED"}
     else:
         query["disposition"] = {"$in": [d for d in body.dispositions if d in DISPOSITIONS]}
     if not body.ignore_retry_limit:
@@ -307,7 +315,7 @@ async def retry_contacts(campaign_id: str, body: RetryRequest):
     skipped = await db.contacts.count_documents({**{k: v for k, v in query.items() if k != "attempts"}}) - \
         await db.contacts.count_documents(query)
     res = await db.contacts.update_many(query, {"$set": {"status": "queued", "disposition": None, "review_required": False}})
-    if res.modified_count:
+    if res.modified_count and c.status in ("running", "completed"):
         await db.campaigns.update_one({"_id": oid(c.id)}, {"$set": {"status": "running", "updated_at": now_iso()}})
     await cs.audit(db, "contacts_retried", "campaign", c.id, c.id, requeued=res.modified_count,
                    skipped_retry_limit=skipped, dispositions=body.dispositions)
@@ -372,8 +380,8 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
     meta_attempt = ((call.get("assistant") or {}).get("metadata") or {}).get("attempt_id")
     query = {"provider_call_id": call_id} if call_id else None
     doc = await db.call_attempts.find_one(query) if query else None
-    if not doc and meta_attempt:
-        doc = await db.call_attempts.find_one({"_id": oid(meta_attempt)})
+    if not doc and meta_attempt and ObjectId.is_valid(meta_attempt):
+        doc = await db.call_attempts.find_one({"_id": ObjectId(meta_attempt)})
     if not doc:
         logger.warning("Webhook for unknown call %s", call_id)
         return {"ok": True, "ignored": "unknown call"}

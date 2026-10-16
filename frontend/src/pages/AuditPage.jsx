@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, fmtTime, usePoll } from "@/lib/api";
 
@@ -8,7 +8,8 @@ const EVENTS = ["campaign_created", "campaign_updated", "contacts_imported", "ca
 
 export default function AuditPage() {
   const [event, setEvent] = useState("");
-  const { data } = usePoll(() => api.get("/audit", { params: { event: event || undefined } }).then((r) => r.data), 5000);
+  const { data, reload } = usePoll(() => api.get("/audit", { params: { event: event || undefined } }).then((r) => r.data), 5000);
+  useEffect(() => { reload(); }, [event, reload]);
   return (
     <div className="mx-auto max-w-[1500px] space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -35,7 +36,7 @@ export default function AuditPage() {
                 <td className="whitespace-nowrap p-3 text-xs text-slate-500">{fmtTime(l.created_at)}</td>
                 <td className="p-3 font-mono text-xs text-blue-300">{l.event}</td>
                 <td className="p-3 font-mono text-[11px] text-slate-500">{l.entity_type} {l.entity_id?.slice(-6)}</td>
-                <td className="p-3 font-mono text-[11px] text-slate-400">
+                <td className="break-all p-3 font-mono text-[11px] text-slate-400">
                   {Object.entries(l.details || {}).map(([k, v]) => <span key={k} className="mr-3">{k}=<span className="text-slate-300">{Array.isArray(v) ? v.join(",") : String(v)}</span></span>)}
                 </td>
               </tr>
