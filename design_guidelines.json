@@ -1,0 +1,142 @@
+{
+  "project_name": "BPO RPI Calling Module — RevLoop Admin Engine",
+  "app_type": "dashboard",
+  "emotional_archetype": "ARCHETYPE 2 & 4: Tactical Command Center & Swiss High Contrast (High-density telemetry, instant status recognition, zero visual clutter)",
+  "theme": {
+    "default_mode": "dark",
+    "theme_toggle_supported": true,
+    "dark_background": "#0B0F17",
+    "light_background": "#F8FAFC"
+  },
+  "typography": {
+    "heading_font": "Plus Jakarta Sans, Outfit, sans-serif",
+    "body_font": "Inter, DM Sans, sans-serif",
+    "mono_font": "JetBrains Mono, Fira Code, monospace",
+    "banned_fonts": ["Space Grotesk", "Roboto", "Comic Sans"],
+    "hierarchy": {
+      "h1_dashboard_title": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-100",
+      "h2_section_title": "text-lg sm:text-xl font-semibold tracking-tight text-slate-200",
+      "h3_widget_title": "text-sm sm:text-base font-semibold text-slate-300",
+      "metric_value_large": "text-2xl sm:text-3xl font-extrabold tracking-tight font-mono",
+      "body_standard": "text-sm text-slate-300 leading-normal",
+      "caption_mono": "text-xs font-mono text-slate-400 tracking-wide uppercase"
+    }
+  },
+  "colors": {
+    "banned_colors": ["#1B93A4", "teal green", "teal blue", "#7351B7"],
+    "palette": {
+      "bg_dark": "#0B0F17",
+      "surface_dark": "#111827",
+      "surface_card": "#1E293B",
+      "border_dark": "rgba(255, 255, 255, 0.08)",
+      "border_active": "rgba(255, 255, 255, 0.20)",
+      "primary_brand": "#3B82F6",
+      "primary_brand_hover": "#2563EB",
+      "text_primary": "#F8FAFC",
+      "text_secondary": "#94A3B8",
+      "text_muted": "#64748B"
+    },
+    "disposition_badges": {
+      "RPI_CONFIRMED": {
+        "bg": "bg-emerald-500/10",
+        "border": "border-emerald-500/30",
+        "text": "text-emerald-400",
+        "dot": "bg-emerald-500"
+      },
+      "WRONG_PARTY": {
+        "bg": "bg-rose-500/10",
+        "border": "border-rose-500/30",
+        "text": "text-rose-400",
+        "dot": "bg-rose-500"
+      },
+      "NO_ANSWER_VOICEMAIL": {
+        "bg": "bg-amber-500/10",
+        "border": "border-amber-500/30",
+        "text": "text-amber-400",
+        "dot": "bg-amber-500"
+      },
+      "FAILED_NUMBER": {
+        "bg": "bg-slate-500/10",
+        "border": "border-slate-500/30",
+        "text": "text-slate-400",
+        "dot": "bg-slate-500"
+      },
+      "CALLING_IN_PROGRESS": {
+        "bg": "bg-blue-500/10",
+        "border": "border-blue-500/30",
+        "text": "text-blue-400",
+        "dot": "bg-blue-500 animate-pulse"
+      },
+      "PENDING_QUEUED": {
+        "bg": "bg-indigo-500/10",
+        "border": "border-indigo-500/30",
+        "text": "text-indigo-400",
+        "dot": "bg-indigo-400"
+      }
+    }
+  },
+  "layout_strategy": {
+    "grid_mode": "MODE B: High Density Grid (Dashboards & Analytics)",
+    "container_padding": "p-4 sm:p-6 lg:p-8 space-y-6",
+    "card_radius": "rounded-lg border border-slate-800 bg-slate-900/90 shadow-sm",
+    "header_nav": "RevLoop Admin Sticky Top Bar with brand logo, campaign selector dropdown, system health status indicator (Vapi API connected, ElevenLabs active), theme toggle, and supervisor profile avatar.",
+    "sidebar_navigation": "Collapsible left sidebar with direct navigation items: Campaigns, Live Calls, Contact Records, Audio Transcripts, Provider Settings, Audit Logs."
+  },
+  "key_modules_and_components": [
+    {
+      "name": "Telemetry KPI Header Grid",
+      "description": "4-column high density stat cards displaying Total Uploaded Contacts, RPI Confirmation Rate (%), Wrong Party Deflection %, No-Answer/Voicemail %, Active Concurrent Calls, and Avg Call Duration (sec).",
+      "test_ids": ["kpi-total-contacts", "kpi-rpi-rate", "kpi-wrong-party", "kpi-voicemail", "kpi-active-calls"]
+    },
+    {
+      "name": "Campaign Control & Operational Bar",
+      "description": "Primary actionable bar with Launch Campaign (Batch Start), Pause Outbound Queue, Retry Failed Numbers, Export CSV Report, and Upload CSV Contacts trigger.",
+      "test_ids": ["btn-launch-campaign", "btn-pause-campaign", "btn-retry-failed", "btn-export-csv", "btn-upload-csv"]
+    },
+    {
+      "name": "CSV Upload & Validation Report Modal",
+      "description": "Drag-and-drop CSV handler with instant pre-flight validation listing duplicate phone numbers, invalid formatting, missing customer IDs, and language breakdown with confirmation step before launching.",
+      "test_ids": ["csv-upload-dropzone", "csv-validation-summary", "csv-confirm-import-btn", "csv-cancel-btn"]
+    },
+    {
+      "name": "Data-Dense Contact & Call Results Table",
+      "description": "Table-first design with columns: Customer ID, Name, Phone Number, Language, Voice ID, Call Status, Disposition Badge, Retries Count, Last Duration, Timestamps, and Call Details Action.",
+      "test_ids": ["contacts-table", "table-search-input", "filter-disposition-select", "filter-language-select", "table-row-action-view-detail"]
+    },
+    {
+      "name": "Call Detail Drawer (Control Room View)",
+      "description": "Multi-section side drawer triggered per call row. Includes Vapi Provider Status, Call ID copy button, Interactive Audio Recording Player with waveform simulation, Full Turn-by-Turn AI vs Customer Transcript, Timestamped STT latency, and Verification outcome logs.",
+      "test_ids": ["call-detail-drawer", "audio-player-play-btn", "audio-waveform-container", "call-transcript-list", "vapi-call-id-badge"]
+    },
+    {
+      "name": "Admin / Supervisor Settings Panel",
+      "description": "Explicit form settings for Vapi API Key, Phone Number ID, Webhook Callback URL, Voice Profile Mapping (Male/Female voice IDs per language: EN-US, ES-US, FR-CA), Free-text AI Verification Prompt Editor, and Retry Rules (max retries, delay interval).",
+      "test_ids": ["settings-vapi-api-key-input", "settings-phone-number-id-input", "settings-voice-male-select", "settings-voice-female-select", "settings-prompt-textarea", "settings-save-button"]
+    },
+    {
+      "name": "Audit Log View",
+      "description": "Real-time timeline of administrative actions, API call triggers, campaign state changes, credential updates, and batch retries.",
+      "test_ids": ["audit-log-table", "audit-log-filter-event"]
+    }
+  ],
+  "image_urls": {
+    "supervisor_avatar": "https://images.unsplash.com/photo-1560264280-88b68371db39?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHw0fHxjYWxsJTIwY2VudGVyJTIwYWdlbnQlMjBzdXBlcnZpc29yJTIwZGFzaGJvYXJkJTIwYW5hbHl0aWNzfGVufDB8fHx8MTc5MjE3MTMwN3ww&ixlib=rb-4.1.0&q=85",
+    "call_center_bg": "https://images.pexels.com/photos/7682132/pexels-photo-7682132.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+  },
+  "instructions_to_main_agent": [
+    "Build a production-grade React application with Tailwind CSS and Shadcn UI primitives for the BPO RPI Outbound Calling Module.",
+    "Follow the RevLoop admin style with dense, high-clarity data displays and dark slate/obsidian palette.",
+    "Do NOT use teal blue/green (#1B93A4) or Space Grotesk font.",
+    "Use data-testid attributes on ALL interactive buttons, table rows, filter tabs, modal controls, and settings inputs.",
+    "Provide realistic mock data generation for BPO contacts, Vapi calls, transcripts, and disposition stats so the dashboard feels active out of the box.",
+    "Ensure CSV upload validation checks phone numbers (+1 E.164 format check), duplicate detection, and missing fields, showing a clear pre-import error breakdown.",
+    "Ensure the call detail drawer contains a working simulated audio player with waveform visualization and readable speaker-labeled transcript items.",
+    "Keep settings form editable and store configuration state cleanly so supervisors can modify Vapi credentials, prompt scripts, and voice mappings."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "Avoid generic centered layouts or unstyled templates. Use RevLoop structured admin navigation and high-density panels.",
+    "Every state change (launching campaign, pausing queue, filtering table, saving settings) must have explicit feedback toasts via Sonner.",
+    "Use 1px crisp borders (`border-slate-800`) with high contrast text for APCA accessibility.",
+    "No universal transition classes (`transition-all`). Target specific CSS properties like `transition-colors` or `transition-opacity`."
+  ]
+}
