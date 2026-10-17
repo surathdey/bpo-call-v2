@@ -99,6 +99,17 @@ def voice_config(settings: Settings, vp, voice_id: str) -> dict:
     return {k: v for k, v in cfg.items() if v not in ("", None)}
 
 
+def closing_messages(settings: Settings, language: str, variables: dict) -> list:
+    """Vapi speaks the exact closing line for the filed disposition, then hangs up (no LLM improvisation)."""
+    lines = script_lines(settings, language, variables)
+    msgs = [{"type": "request-complete", "role": "assistant", "content": lines[d.close],
+             "endCallAfterSpokenEnabled": True,
+             "conditions": [{"param": "disposition", "operator": "eq", "value": d.code}]}
+            for d in settings.dispositions if lines.get(d.close)]
+    msgs.append({"type": "request-failed", "content": lines["denial_close"], "endCallAfterSpokenEnabled": True})
+    return msgs
+
+
 def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact, attempt: CallAttempt) -> dict:
     from models import DISPOSITIONS
     variables = call_variables(campaign, contact, attempt.spoken_name)
@@ -106,9 +117,10 @@ def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact,
     prompt = campaign.prompt or settings.default_prompt
     hook = webhook_url(settings)
     tool = {"type": "function", "async": False,
+            "messages": closing_messages(settings, contact.language, variables),
             "function": {"name": "file_disposition",
-                         "description": ("File the final call disposition. Call this only AFTER you have fully spoken "
-                                         "the closing line, then end the call."),
+                         "description": ("File the final call disposition as soon as the outcome is clear. Do not speak "
+                                         "before calling it; the system then speaks the closing line and ends the call."),
                          "parameters": {"type": "object", "required": ["disposition"], "properties": {
                              "disposition": {"type": "string", "enum": DISPOSITIONS},
                              "summary": {"type": "string", "description": "One-line English summary of the call"}}}}}

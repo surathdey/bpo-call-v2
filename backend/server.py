@@ -506,8 +506,7 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
                 await cs.audit(db, "agent_disposition_filed", "call_attempt", attempt_id, doc["campaign_id"],
                                disposition=args["disposition"])
                 results.append({"toolCallId": tc.get("id"), "result": (
-                    "Disposition recorded. If you have not already spoken the closing line, speak it now in full; "
-                    "only after it has been spoken, end the call. Never hang up silently.")})
+                    "Disposition recorded. The closing line is spoken automatically; do not say anything else.")})
             elif fn.get("name") != "file_disposition":
                 results.append({"toolCallId": tc.get("id"), "result": f"Unknown tool '{fn.get('name')}'."})
             else:
