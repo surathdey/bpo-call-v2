@@ -393,6 +393,9 @@ EXPORT_COLUMNS = ["phone_number", "callee_name", "bank_name", "state", "Call ID"
 
 
 def public_base(s: Settings, request: Request) -> str:
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if host and not host.startswith(("localhost", "127.0.0.1", "0.0.0.0")):
+        return f"{request.headers.get('x-forwarded-proto', 'https').split(',')[0]}://{host.split(',')[0]}"
     return (s.webhook_base_url or os.environ.get("PUBLIC_BASE_URL") or str(request.base_url)).rstrip("/")
 
 

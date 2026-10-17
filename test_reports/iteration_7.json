@@ -1,0 +1,30 @@
+{
+  "summary": "Read-only check that PROD (https://identity-check-ops.emergent.host) and PREVIEW serve the same code. Result: PROD has the latest Round 3 backend and frontend. All 14 parametrized read-only API checks passed (7 on prod, 7 on preview). (1) /api/settings: en-IN, hi-IN and bn-IN each have a non-empty reverify template. No template contains representative, प्रतिनिधि or প্রতিনিধি. FINAL_DENIAL_CLOSING is in dispositions and unreached_disposition is FINAL_DENIAL_CLOSING. hi-IN and bn-IN use tts_model eleven_v3, and the bn-IN voices are 611e0Wo6wEi3GcpkO5it and GuSivqtqi1qfWxEuGhqa. (2) preview-name for 'Surath Dey' in bn-IN returns 'সুরথ দে' on both. GET reset-scripts returns 405 on both, so the POST route exists (it was not POSTed). (3) prompt-preview for West Bengal returns bn-IN with RPI CONVERSATION FLOW, REVERIFY and 'OPERATOR INSTRUCTIONS (high priority', and has no '(('. (4) The export header has exactly the 14 expected columns on both. UI on both: the Name pronunciation section, the 'Reset scripts to defaults' button (not clicked), a reverify textarea in the script tab, and a TTS PROVIDER column in Voice profiles are all present. /rpi/campaigns shows 8 bucket counts per campaign (RPC CONFIRMED, CPC CONFIRMED, CALLBACK, FINAL DENIAL, FINAL DENIAL CLOSING, HOSTILE, DECEASED, DNC ESCALATION) plus the summary cards. There were no page errors. CRITICAL CONFIG FINDING: in PROD settings, webhook_base_url is set to the PREVIEW URL (https://identity-check-ops.preview.emergentagent.com), so the PROD webhook_url points to the preview backend. The two environments use different databases (different campaign lists: prod has 12 campaigns, preview 11).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PROD /api/settings (webhook_base_url)", "issue": "PROD webhook_base_url = https://identity-check-ops.preview.emergentagent.com. Vapi calls launched from PROD send their webhooks (tool-calls file_disposition, status-update, end-of-call-report) to the PREVIEW backend. Preview uses a separate DB, does not know the PROD call ids, and answers {ok:true, ignored}. PROD calls may therefore never receive dispositions, transcripts or recordings from Vapi. PROD export Recording links (public_base) also point to preview. Calls will break completely if preview goes to sleep.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_prod_parity_readonly.py", "/app/test_reports/pytest/pytest_prod_parity.xml"],
+  "action_items": [
+    "Ask the user to set PROD Settings > Webhook base URL to https://identity-check-ops.emergent.host, or clear it so the fallback is used, and then save. Alternatively, stop the settings migration/seed from copying the preview webhook_base_url. Consider making webhook_base_url environment-specific (use PUBLIC_BASE_URL env or request.base_url) and not storing it in a DB that may be copied between environments.",
+    "Optionally show a warning in the Settings UI when webhook_base_url does not match window.location.origin."
+  ],
+  "critical_code_review_comments": [
+    "public_base() puts the DB value s.webhook_base_url ahead of the PUBLIC_BASE_URL env var. Because the DB value was copied, prod points to preview. Prefer the env var per deployment, or validate the host against the request host.",
+    "GET /api/campaigns/{id}/export writes an audit log, so even 'read-only' exports change data (minor)."
+  ],
+  "updated_files": ["/app/backend/tests/test_prod_parity_readonly.py"],
+  "success_rate": {"backend": "100% (14/14 parity checks)", "frontend": "100%"},
+  "seed_data_creation": "None. Strictly read-only, except that preview-name may cache a transliteration and the export call writes a 'campaign_exported' audit entry.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "LIVE mode on both envs. Use tests/test_prod_parity_readonly.py (parametrized prod and preview, read-only) for deployment parity checks. Never run test_rpi_v2.py. The playbook 'Jev route' instruction does not apply: no such route exists.",
+  "rca of the issue": "Code is deployed correctly: all Round 3 features are present in PROD. If the user still sees old behaviour on PROD calls, the likely cause is that PROD webhook_base_url points to the preview backend, so Vapi call events for PROD calls are handled (and ignored) by preview. Mitigation: set the PROD webhook base URL to the prod domain."
+}

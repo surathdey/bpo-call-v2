@@ -68,7 +68,7 @@ export default function SettingsPage() {
     try {
       const { has_vapi_api_key, webhook_url, vapi_api_key_last4, updated_at, ...rest } = s;
       const payload = { ...rest, dnc_numbers: dnc.split(/[\n,]/).map((x) => x.trim()).filter(Boolean),
-        webhook_base_url: s.webhook_base_url || process.env.REACT_APP_BACKEND_URL };
+        webhook_base_url: s.webhook_base_url || window.location.origin };
       if (apiKey.trim()) payload.vapi_api_key = apiKey.trim();
       const { data } = await api.put("/settings", payload);
       load(data); setApiKey("");
@@ -122,8 +122,14 @@ export default function SettingsPage() {
           <Field label="LLM model (Vapi)"><Input value={s.vapi_model} onChange={set("vapi_model")} data-testid="settings-vapi-model-input" /></Field>
         </div>
         <Field label="Webhook base URL" hint="Public URL Vapi can reach. Defaults to this app's backend URL.">
-          <Input className="font-mono" value={s.webhook_base_url} placeholder={process.env.REACT_APP_BACKEND_URL} onChange={set("webhook_base_url")} data-testid="settings-webhook-base-input" />
+          <Input className="font-mono" value={s.webhook_base_url} placeholder={window.location.origin} onChange={set("webhook_base_url")} data-testid="settings-webhook-base-input" />
         </Field>
+        {s.webhook_base_url && s.webhook_base_url.replace(/\/+$/, "") !== window.location.origin && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-300" data-testid="webhook-mismatch-warning">
+            <span className="flex-1">Webhook points to <b>{s.webhook_base_url}</b>, not this site ({window.location.origin}). Call results from this environment would go to the other one.</span>
+            <Button size="sm" variant="outline" className="border-amber-500/50" onClick={() => set("webhook_base_url")(window.location.origin)} data-testid="use-this-site-url-btn">Use this site's URL</Button>
+          </div>
+        )}
         {s.webhook_url && (
           <div className="flex items-center gap-2 rounded-md border border-slate-800 bg-[#0B0F17] p-2.5">
             <code className="flex-1 truncate text-[11px] text-slate-400" data-testid="settings-webhook-url">{s.webhook_url}</code>
