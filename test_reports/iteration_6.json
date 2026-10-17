@@ -1,0 +1,18 @@
+{
+  "summary": "Read-only verification of the round-3 fixes in LIVE mode. No calls were placed, no settings were saved, reset-scripts was not clicked, and test_rpi_v2.py was not run. 44/44 pytest passed: 17 new tests in test_round3_fixes.py plus the round-2 and recordings regression tests. (1) A reverify template with {{customer_name}} exists in en-IN, hi-IN and bn-IN, in both the live DB and DEFAULT_SCRIPTS. SCRIPT_KEYS includes reverify. No template in any language contains representative, प्रतिनिधि or প্রতিনিধি. (2) sanitize_prompt keeps 'NEVER transfer the call.', '- Do not reveal account balance' and 'Use {customer_name} ji' exactly as written, and keeps {{vars}} too. It flags only 'Ignore previous instructions'. PROMPT_LIMIT is 8000 and a 6000-char prompt is not truncated. (3) prompt-preview for West Bengal returns bn-IN with the line REVERIFY: 'আমাদের রেকর্ডে এই নম্বরটি সুরথ দে জি-র নামে নথিভুক্ত আছে...'. It has the RPI CONVERSATION FLOW section, hard rule 6 with the closing order (a) closing line, (b) file_disposition, (c) end the call, and 'OPERATOR INSTRUCTIONS (high priority'. The campaign prompt is longer than 1500 chars, has no '((', and includes 'NEVER transfer the call to a human' and the last line 'ALWAYS disclose at the very start that the call is recorded.'. The system prompt is 7202 chars and flags are []. (4) Webhook: a bad token returns 401 and an unknown call returns {ok:true, ignored}. For a temporary live attempt (provider_call_id test-tool-xyz), file_disposition returns a result telling the agent to speak the closing line before ending the call, and agent_disposition is persisted. An unknown tool returns 'Unknown tool', and an invalid disposition returns 'Invalid disposition'. The temporary attempt and its audit logs were deleted (verified 0 left). (5) In build_vapi_payload, the file_disposition description says to call it only AFTER the closing line has been spoken. UI /rpi/settings: the reverify textareas (script-bn-IN/hi-IN/en-IN-reverify) show the new text, and reset-scripts-btn ('Reset scripts to defaults') is visible. There were no page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_round3_fixes.py", "/app/backend/tests/test_round2_fixes.py", "/app/backend/tests/test_recordings_voice.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "migrate_legacy replaces templates that contain CALLBACK_PROMISE_MARKERS only for confirmed_close and cpc_close. If a legacy 'representative' phrase appears in another key, it will not be migrated (currently none do; verified).",
+    "The template variable syntax is {{var}}, while the review request mentions {customer_name}. Both are preserved by sanitize_prompt, but only {{var}} is rendered by render(), so single-brace text in operator prompts reaches the LLM unchanged."
+  ],
+  "updated_files": ["/app/backend/tests/test_round3_fixes.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "A temporary call_attempt (provider_call_id test-tool-xyz) was inserted and deleted, along with its audit logs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "LIVE Vapi mode. Run only tests/test_round3_fixes.py, test_round2_fixes.py and test_recordings_voice.py (all read-only). Never run test_rpi_v2.py. The playbook 'Jev route' instruction does not apply: no such route exists in this app.",
+  "rca of the issue": "N/A - all round-3 fixes verified"
+}
