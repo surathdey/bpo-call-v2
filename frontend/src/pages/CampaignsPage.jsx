@@ -4,18 +4,32 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, fmtTime, usePoll } from "@/lib/api";
 import { KpiGrid } from "@/components/rpi/KpiGrid";
-import { StatusBadge } from "@/components/rpi/Badges";
+import { StatusBadge, dispositionLabel, dispositionText } from "@/components/rpi/Badges";
 import { CampaignFormDialog } from "@/components/rpi/CampaignFormDialog";
+import { DISPOSITIONS } from "@/lib/api";
+
+const BAR_COLORS = { RPC_CONFIRMED: "bg-emerald-500", CPC_CONFIRMED: "bg-teal-400", CALLBACK_REQUESTED: "bg-sky-400",
+  FINAL_DENIAL: "bg-rose-500", "Final Denial Closing": "bg-slate-400", HOSTILE: "bg-orange-500", DECEASED_CASE: "bg-violet-400",
+  DNC_ESCALATION: "bg-amber-500" };
 
 const Bar = ({ s }) => {
   const total = s.total || 1;
-  const seg = [["RPI_CONFIRMED", "bg-emerald-500"], ["WRONG_PARTY", "bg-rose-500"], ["NO_ANSWER_VOICEMAIL", "bg-amber-500"], ["FAILED_NUMBER", "bg-slate-500"]];
   return (
     <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-      {seg.map(([k, c]) => <div key={k} className={c} style={{ width: `${(s[k] / total) * 100}%` }} />)}
+      {DISPOSITIONS.map((k) => <div key={k} className={BAR_COLORS[k]} style={{ width: `${((s[k] || 0) / total) * 100}%` }} />)}
     </div>
   );
 };
+
+const BucketCounts = ({ s, cid }) => (
+  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1" data-testid={`campaign-bucket-counts-${cid}`}>
+    {DISPOSITIONS.map((d) => (
+      <span key={d} className="font-mono text-[10px] uppercase tracking-wide text-slate-500">
+        {dispositionLabel(d)} <span className={dispositionText(d)}>{s[d] || 0}</span>
+      </span>
+    ))}
+  </div>
+);
 
 export default function CampaignsPage() {
   const nav = useNavigate();
@@ -51,12 +65,13 @@ export default function CampaignsPage() {
                 className="cursor-pointer border-b border-slate-800/60 transition-colors hover:bg-slate-800/40">
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-100">{c.name}</div>
-                  <div className="font-mono text-[11px] text-slate-500">{c.language} · {c.voice_gender} voice · created {fmtTime(c.created_at)}</div>
+                  <div className="font-mono text-[11px] text-slate-500">agent {c.agent_name || "— not set"} · {c.voice_gender} voice · created {fmtTime(c.created_at)}</div>
+                  <BucketCounts s={c.stats} cid={c.id} />
                 </td>
                 <td className="px-4 py-3"><StatusBadge value={c.status} testId={`campaign-status-${c.id}`} /></td>
                 <td className="w-1/4 px-4 py-3"><Bar s={c.stats} /></td>
                 <td className="px-4 py-3 text-right font-mono text-xs text-slate-400">
-                  <span className="text-emerald-400">{c.stats.RPI_CONFIRMED}</span> / {c.stats.total} · {c.stats.rpi_rate}%
+                  <span className="text-emerald-400">{c.stats.RPC_CONFIRMED}</span> / {c.stats.total} · {c.stats.rpi_rate}%
                 </td>
               </tr>
             ))}

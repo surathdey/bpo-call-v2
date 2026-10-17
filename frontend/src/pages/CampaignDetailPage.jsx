@@ -19,7 +19,7 @@ const ALL = "ALL";
 const FilterTabs = ({ value, onChange, stats }) => (
   <div className="flex flex-wrap gap-1" data-testid="filter-disposition-tabs">
     {[ALL, ...DISPOSITIONS, "NONE"].map((d) => (
-      <button key={d} onClick={() => onChange(d === ALL ? "" : d)} data-testid={`filter-disposition-${d}`}
+      <button key={d} onClick={() => onChange(d === ALL ? "" : d)} data-testid={`filter-disposition-${d.replace(/\s+/g, "_")}`}
         className={cn("rounded-md border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wide transition-colors",
           (value || ALL) === d ? "border-blue-500/50 bg-blue-500/10 text-blue-300" : "border-slate-800 text-slate-400 hover:text-slate-200")}>
         {d === ALL ? "All" : d === "NONE" ? "Not dialed" : dispositionLabel(d)}
@@ -31,12 +31,19 @@ const FilterTabs = ({ value, onChange, stats }) => (
 
 const ScriptPanel = ({ c }) => (
   <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-xs" data-testid="script-panel">
-    <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">Approved script · {c.language} · {c.voice_gender} voice <span className="text-slate-600">({c.resolved_voice_id || "no voice id"})</span></div>
-    <div className="grid gap-2 md:grid-cols-3">
-      <p><span className="text-blue-300">Opening — </span>{c.script.opening}</p>
-      <p><span className="text-emerald-300">If confirmed — </span>{c.script.confirmed}</p>
-      <p><span className="text-rose-300">If wrong party — </span>{c.script.wrong}</p>
+    <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-slate-500">
+      Intro script · agent <span className="text-blue-300" data-testid="script-agent-name">{c.agent_name || "NOT SET"}</span> · {c.voice_gender} voice ·
+      rules: {c.state_rules.map((r) => `${r.state} → ${r.language}`).join(", ") || "none"} · else {c.fallback_language}
     </div>
+    <div className="grid gap-3 md:grid-cols-3">
+      {Object.entries(c.scripts).map(([lang, s]) => (
+        <div key={lang} data-testid={`script-${lang}`}>
+          <div className="mb-1 font-mono text-[10px] text-slate-500">{s.label} · {s.voice_id || "no voice id"}</div>
+          <p className="text-slate-300">{s.opening}</p>
+        </div>
+      ))}
+    </div>
+    {!c.agent_name && <p className="mt-2 text-amber-400" data-testid="agent-name-missing">Set an agent name before launching.</p>}
     {c.prompt_flags?.length > 0 && (
       <p className="mt-2 text-amber-400" data-testid="prompt-flags">Guardrail stripped {c.prompt_flags.length} prompt line(s): “{c.prompt_flags[0]}”</p>
     )}
@@ -86,7 +93,7 @@ export default function CampaignDetailPage() {
     } catch (e) { toast.error(errMsg(e)); }
   };
 
-  const retryBody = selected.size ? { contact_ids: [...selected] } : { dispositions: ["FAILED_NUMBER", "NO_ANSWER_VOICEMAIL"] };
+  const retryBody = selected.size ? { contact_ids: [...selected] } : {};
   const toggle = (cid) => setSelected((s) => { const n = new Set(s); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
   const toggleAll = () => setSelected((s) => (rows?.every((r) => s.has(r.id)) ? new Set() : new Set(rows?.map((r) => r.id))));
 
@@ -119,7 +126,7 @@ export default function CampaignDetailPage() {
         <Button size="sm" variant="secondary" className="gap-2" disabled={busy === "retry"} data-testid="btn-retry-failed"
           onClick={() => act("retry", () => api.post(`/campaigns/${id}/retry`, retryBody),
             (d) => `Re-queued ${d.requeued}${d.skipped_retry_limit ? ` · ${d.skipped_retry_limit} at retry limit` : ""}`).then(() => setSelected(new Set()))}>
-          <RotateCcw className="h-4 w-4" />{selected.size ? `Retry selected (${selected.size})` : "Retry failed / no-answer"}</Button>
+          <RotateCcw className="h-4 w-4" />{selected.size ? `Retry selected (${selected.size})` : "Retry unreached"}</Button>
         <Button size="sm" variant="secondary" className="gap-2" onClick={exportCsv} data-testid="btn-export-csv"><Download className="h-4 w-4" />Export{filter && filter !== "NONE" ? ` ${dispositionLabel(filter)}` : ""}</Button>
         <span className="ml-auto pr-2 font-mono text-[11px] text-slate-500" data-testid="queue-summary">
           {c.stats.queued} queued · {c.stats.calling} calling · {c.stats.completed} done</span>
@@ -145,7 +152,7 @@ export default function CampaignDetailPage() {
             </Select>
             <div className="relative">
               <Search className="absolute left-2 top-2 h-4 w-4 text-slate-500" />
-              <Input className="h-8 w-52 pl-8 text-xs" placeholder="Name, phone, customer ID" value={q} onChange={(e) => setQ(e.target.value)} data-testid="table-search-input" />
+              <Input className="h-8 w-52 pl-8 text-xs" placeholder="Name, phone, bank, state" value={q} onChange={(e) => setQ(e.target.value)} data-testid="table-search-input" />
             </div>
           </div>
         </div>

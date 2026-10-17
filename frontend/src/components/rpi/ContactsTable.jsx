@@ -18,8 +18,8 @@ export const ContactsTable = ({ rows, selected, onToggle, onToggleAll, onOpen })
         <thead className="border-b border-slate-800 bg-slate-900/60">
           <tr>
             <TH className="w-8"><Checkbox checked={all} onCheckedChange={onToggleAll} data-testid="select-all-contacts" /></TH>
-            <TH>Customer ID</TH><TH>Name</TH><TH>Phone</TH><TH>Lang</TH><TH>Call state</TH><TH>Disposition</TH>
-            <TH>Tries</TH><TH>Duration</TH><TH>Last called</TH><TH />
+            <TH>Phone number</TH><TH>Name</TH><TH>Bank</TH><TH>State</TH><TH>Lang</TH><TH>Call state</TH><TH>Disposition</TH>
+            <TH>Category</TH><TH>Tries</TH><TH>Duration</TH><TH>Last called</TH><TH />
           </tr>
         </thead>
         <tbody>
@@ -29,17 +29,23 @@ export const ContactsTable = ({ rows, selected, onToggle, onToggleAll, onOpen })
               <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                 <Checkbox checked={selected.has(r.id)} onCheckedChange={() => onToggle(r.id)} data-testid={`select-contact-${r.id}`} />
               </td>
-              <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.customer_id || "—"}</td>
-              <td className="px-3 py-2 font-medium text-slate-200">{r.name}</td>
               <td className="px-3 py-2 font-mono text-xs text-slate-300">{r.phone}</td>
+              <td className="px-3 py-2 font-medium text-slate-200">{r.name}</td>
+              <td className="px-3 py-2 text-xs text-slate-400">{r.bank_name}</td>
+              <td className="px-3 py-2 text-xs text-slate-400">{r.state || "—"}</td>
               <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.language}</td>
-              <td className="px-3 py-2"><StatusBadge value={r.status} testId={`contact-status-${r.id}`} /></td>
+              <td className="px-3 py-2">
+                <StatusBadge value={r.status} testId={`contact-status-${r.id}`} />
+                {r.last_call_status && r.last_call_status !== "completed" && r.status === "completed" &&
+                  <div className="mt-0.5 font-mono text-[10px] uppercase text-slate-500">{r.last_call_status}</div>}
+              </td>
               <td className="px-3 py-2">
                 <div className="flex items-center gap-1.5">
                   <DispositionBadge value={r.disposition} testId={`contact-disposition-${r.id}`} />
                   {r.review_required && <Flag className="h-3.5 w-3.5 text-amber-400" title="Needs review" data-testid={`contact-review-${r.id}`} />}
                 </div>
               </td>
+              <td className="px-3 py-2 text-xs text-slate-400">{r.last_category || "—"}</td>
               <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.attempts}</td>
               <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.last_duration != null ? `${r.last_duration}s` : "—"}</td>
               <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">{fmtTime(r.last_called_at)}</td>

@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { api, errMsg, LANGUAGES } from "@/lib/api";
+import { api, errMsg } from "@/lib/api";
 
 export const CampaignFormDialog = ({ open, onOpenChange, campaign, onSaved }) => {
   const editing = Boolean(campaign);
@@ -17,11 +16,11 @@ export const CampaignFormDialog = ({ open, onOpenChange, campaign, onSaved }) =>
   useEffect(() => {
     if (!open) return;
     if (campaign) {
-      setForm({ name: campaign.name, description: campaign.description, language: campaign.language,
-        voice_gender: campaign.voice_gender, voice_id: campaign.voice_id, prompt: campaign.prompt });
+      setForm({ name: campaign.name, description: campaign.description, agent_name: campaign.agent_name,
+        voice_gender: campaign.voice_gender, prompt: campaign.prompt });
     } else {
-      api.get("/settings").then(({ data }) => setForm({ name: "", description: "", language: data.default_language,
-        voice_gender: data.default_voice_gender, voice_id: "", prompt: data.default_prompt }));
+      api.get("/settings").then(({ data }) => setForm({ name: "", description: "", agent_name: data.default_agent_name,
+        voice_gender: data.default_voice_gender, prompt: data.default_prompt }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, campaign?.id]);
@@ -30,6 +29,7 @@ export const CampaignFormDialog = ({ open, onOpenChange, campaign, onSaved }) =>
 
   const save = async () => {
     if (!form.name?.trim()) return toast.error("Campaign name is required");
+    if (!form.agent_name?.trim()) return toast.error("Agent name is required");
     setSaving(true);
     try {
       const { data } = editing ? await api.patch(`/campaigns/${campaign.id}`, form) : await api.post("/campaigns", form);
@@ -61,13 +61,9 @@ export const CampaignFormDialog = ({ open, onOpenChange, campaign, onSaved }) =>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Default language</Label>
-              <Select value={form.language} onValueChange={set("language")}>
-                <SelectTrigger data-testid="campaign-language-select"><SelectValue placeholder="Language" /></SelectTrigger>
-                <SelectContent>
-                  {LANGUAGES.map((l) => <SelectItem key={l.code} value={l.code} data-testid={`lang-option-${l.code}`}>{l.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Label>Agent name</Label>
+              <Input data-testid="campaign-agent-name-input" value={form.agent_name || ""} onChange={set("agent_name")} placeholder="e.g. Ria, Suparna" />
+              <p className="text-xs text-slate-500">Spoken as {"{{agent_name}}"} in the intro.</p>
             </div>
             <div className="space-y-1.5">
               <Label>Voice</Label>
@@ -80,11 +76,9 @@ export const CampaignFormDialog = ({ open, onOpenChange, campaign, onSaved }) =>
               </RadioGroup>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label>Voice profile ID override <span className="text-slate-500">(optional, ElevenLabs voiceId)</span></Label>
-            <Input data-testid="campaign-voice-id-input" className="font-mono text-xs" value={form.voice_id || ""}
-              onChange={set("voice_id")} placeholder="Leave blank to use the language × gender profile from Settings" />
-          </div>
+          <p className="rounded-md border border-slate-800 bg-slate-900/60 p-2.5 text-xs text-slate-400">
+            Language is chosen per contact from its state/province using the admin state → language rules (Settings).
+          </p>
           <div className="space-y-1.5">
             <Label>AI agent prompt (style notes)</Label>
             <Textarea data-testid="campaign-prompt-textarea" rows={5} value={form.prompt || ""} onChange={set("prompt")} />

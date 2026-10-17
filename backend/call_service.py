@@ -11,7 +11,7 @@ from bson import ObjectId
 from cryptography.fernet import Fernet
 
 from models import AuditLog, CallAttempt, Campaign, Contact, Settings, now_iso
-from rpi_engine import LANGUAGES, build_system_prompt, classify_call, sanitize_name, script_lines
+from rpi_engine import build_system_prompt, classify_call, resolve_language, sanitize_name, script_lines
 
 logger = logging.getLogger(__name__)
 VAPI_BASE = "https://api.vapi.ai"
@@ -36,13 +36,18 @@ async def get_settings(db) -> Settings:
     return Settings.model_validate(doc or {})
 
 
+def voice_profile(settings: Settings, language: str):
+    return next((vp for vp in settings.voice_profiles if vp.language == language), settings.voice_profiles[0])
+
+
 def resolve_voice(settings: Settings, campaign: Campaign, language: str) -> str:
-    if campaign.voice_id and language == campaign.language:
-        return campaign.voice_id
-    for vp in settings.voice_profiles:
-        if vp.language == language and vp.gender == campaign.voice_gender:
-            return vp.voice_id
-    return next((vp.voice_id for vp in settings.voice_profiles if vp.gender == campaign.voice_gender), "")
+    vp = voice_profile(settings, language)
+    return vp.male_voice_id if campaign.voice_gender == "male" else vp.female_voice_id
+
+
+def call_variables(campaign: Campaign, contact: Contact) -> dict:
+    return {"agent_name": campaign.agent_name, "bank_name": contact.bank_name,
+            "customer_name": sanitize_name(contact.name), "state": contact.state}
 
 
 def webhook_url(settings: Settings) -> str:
@@ -61,34 +66,46 @@ def within_calling_hours(settings: Settings) -> bool:
 
 
 def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact, attempt: CallAttempt) -> dict:
-    name = sanitize_name(contact.name)
-    lang = LANGUAGES.get(contact.language, LANGUAGES["en-US"])
+    from models import DISPOSITIONS
+    variables = call_variables(campaign, contact)
+    vp = voice_profile(settings, contact.language)
     prompt = campaign.prompt or settings.default_prompt
+    hook = webhook_url(settings)
+    tool = {"type": "function", "async": False,
+            "function": {"name": "file_disposition",
+                         "description": "File the final call disposition before ending the call.",
+                         "parameters": {"type": "object", "required": ["disposition"], "properties": {
+                             "disposition": {"type": "string", "enum": DISPOSITIONS},
+                             "summary": {"type": "string", "description": "One-line English summary of the call"}}}}}
+    if hook:
+        tool["server"] = {"url": hook}
     assistant = {
-        "name": "RevLoop RPI Verifier",
+        "name": f"RPI {campaign.agent_name}"[:40],
         "firstMessage": attempt.opening_line,
         "firstMessageMode": "assistant-speaks-first",
         "model": {
             "provider": settings.vapi_model_provider,
             "model": settings.vapi_model,
-            "temperature": 0.1,
-            "messages": [{"role": "system", "content": build_system_prompt(contact.language, name, settings.company_name, prompt)}],
+            "temperature": 0.4,
+            "messages": [{"role": "system", "content": build_system_prompt(settings, contact.language, variables, prompt)}],
+            "tools": [tool],
         },
-        "voice": {"provider": "11labs", "voiceId": attempt.voice_id, "model": settings.elevenlabs_model},
-        "transcriber": {"provider": "deepgram", "model": "nova-2", "language": lang["transcriber"]},
+        "voice": {"provider": "11labs", "voiceId": attempt.voice_id, "model": vp.tts_model,
+                  "stability": settings.voice_stability, "similarityBoost": 0.75, "style": settings.voice_style},
+        "transcriber": {"provider": vp.stt_provider, "model": vp.stt_model, "language": vp.stt_language},
         "endCallFunctionEnabled": True,
-        "endCallPhrases": lang["goodbye"],
         "maxDurationSeconds": settings.max_call_duration_seconds,
         "silenceTimeoutSeconds": 15,
         "artifactPlan": {"recordingEnabled": True},
-        "serverMessages": ["end-of-call-report", "status-update"],
+        "analysisPlan": {"summaryPlan": {"enabled": True}, "structuredDataPlan": {"enabled": True, "schema": {
+            "type": "object", "properties": {"disposition": {"type": "string", "enum": DISPOSITIONS}}}}},
+        "serverMessages": ["end-of-call-report", "status-update", "tool-calls"],
         "metadata": {"attempt_id": attempt.id, "campaign_id": campaign.id, "contact_id": contact.id},
     }
-    hook = webhook_url(settings)
     if hook:
         assistant["server"] = {"url": hook}
-    return {"phoneNumberId": settings.phone_number_id, "customer": {"number": contact.phone, "name": name[:40]},
-            "assistant": assistant}
+    return {"phoneNumberId": settings.phone_number_id,
+            "customer": {"number": contact.phone, "name": variables["customer_name"][:40]}, "assistant": assistant}
 
 
 def parse_vapi_messages(messages: list) -> list:
@@ -104,7 +121,8 @@ def parse_vapi_messages(messages: list) -> list:
 
 
 async def finalize_attempt(db, attempt_id: str, *, ended_reason, turns, recording_url=None, duration=None,
-                           provider_status="ended", started_at=None, ended_at=None, error=None, source="webhook"):
+                           provider_status="ended", started_at=None, ended_at=None, error=None, source="webhook",
+                           agent_disposition=None, agent_summary=""):
     """Idempotent: only the first caller wins; repeated callbacks are counted and ignored."""
     claimed = await db.call_attempts.find_one_and_update(
         {"_id": ObjectId(attempt_id), "finalized": False},
@@ -117,19 +135,24 @@ async def finalize_attempt(db, attempt_id: str, *, ended_reason, turns, recordin
         return None
     attempt = CallAttempt.from_mongo(claimed)
     settings = await get_settings(db)
-    result = await classify_call(turns, attempt.customer_name, attempt.language, ended_reason,
-                                 settings.confirm_confidence_threshold)
+    variables = {"agent_name": attempt.agent_name, "bank_name": attempt.bank_name,
+                 "customer_name": attempt.customer_name, "state": attempt.state}
+    result = await classify_call(settings, turns, variables, attempt.language, ended_reason,
+                                 attempt.agent_disposition or agent_disposition, attempt.agent_summary or agent_summary)
     ended = ended_at or now_iso()
     update = {"ended_reason": ended_reason, "transcript": turns,
               "transcript_text": "\n".join(f"{t['role'].upper()}: {t['text']}" for t in turns),
               "recording_url": recording_url, "duration_seconds": duration, "error": error,
               "disposition": result["disposition"], "review_required": result["review_required"],
-              "classification": result["classification"], "ended_at": ended,
+              "classification": result["classification"], "ended_at": ended, "call_status": result["call_status"],
+              "category": result["category"], "summary": result["summary"],
               "started_at": started_at or attempt.started_at}
     await db.call_attempts.update_one({"_id": ObjectId(attempt_id)}, {"$set": update})
     await db.contacts.update_one({"_id": ObjectId(attempt.contact_id), "last_attempt_id": attempt_id}, {"$set": {
         "status": "completed", "disposition": result["disposition"], "review_required": result["review_required"],
-        "last_ended_reason": ended_reason, "last_duration": duration, "last_recording_url": recording_url}})
+        "last_ended_reason": ended_reason, "last_duration": duration, "last_recording_url": recording_url,
+        "last_call_status": result["call_status"], "last_category": result["category"],
+        "last_summary": result["summary"]}})
     await audit(db, "call_finalized", "call_attempt", attempt_id, attempt.campaign_id,
                 disposition=result["disposition"], ended_reason=ended_reason, source=source,
                 classifier=result["classification"]["source"])
@@ -138,43 +161,51 @@ async def finalize_attempt(db, attempt_id: str, *, ended_reason, turns, recordin
 
 # ---------- Simulation (MOCK provider) ----------
 SIM_CUSTOMER = {
-    "en-US": {"confirm": "Yes, this is {name}.", "deny": "No, you have the wrong number.", "who": "Who is this?",
-              "depends": "Depends why you're calling.", "speaking": "Speaking.", "yes": "Yes.",
-              "vm": "Hi, you've reached {first}. I'm not available right now, please leave a message after the tone."},
-    "es-US": {"confirm": "Sí, soy {name}.", "deny": "No, número equivocado.", "who": "¿Quién habla?",
-              "depends": "Depende de por qué llama.", "speaking": "Diga.", "yes": "Sí.",
-              "vm": "Hola, se ha comunicado con {first}. Deje su mensaje después del tono."},
-    "fr-CA": {"confirm": "Oui, c'est moi, {name}.", "deny": "Non, c'est un mauvais numéro.", "who": "C'est qui?",
-              "depends": "Ça dépend pourquoi vous appelez.", "speaking": "Oui, j'écoute.", "yes": "Oui.",
-              "vm": "Bonjour, vous avez joint {first}. Laissez un message après le bip."},
+    "en-IN": {"RPC_CONFIRMED": "Yes, I am {name}. Tell me.", "CPC_CONFIRMED": "No, this is his wife. He is not at home right now.",
+              "CALLBACK_REQUESTED": "I'm busy right now, please call me later.", "FINAL_DENIAL": "No, wrong number. I don't know any {first}.",
+              "HOSTILE": "Stop calling me, you idiot! This is nonsense.", "DECEASED_CASE": "{first} passed away last month.",
+              "DNC_ESCALATION": "Do not call this number again or I will file a complaint.", "ambiguous": "Who is this? Why?",
+              "vm": "Hi, you've reached {first}. Please leave a message after the beep."},
+    "hi-IN": {"RPC_CONFIRMED": "हाँ, मैं ही {name} हूँ। बोलिए।", "CPC_CONFIRMED": "नहीं, मैं उनकी पत्नी बोल रही हूँ। मेरे पति अभी घर पर नहीं हैं।",
+              "CALLBACK_REQUESTED": "अभी मैं व्यस्त हूँ, बाद में कॉल कीजिए।", "FINAL_DENIAL": "गलत नंबर है, मैं किसी {first} को नहीं जानता।",
+              "HOSTILE": "बकवास बंद करो, पागल हो क्या? बार-बार फ़ोन करते हो!", "DECEASED_CASE": "{first} जी का पिछले महीने निधन हो गया।",
+              "DNC_ESCALATION": "इस नंबर पर फ़ोन मत करना, वरना शिकायत करूँगा।", "ambiguous": "कौन बोल रहा है? क्यों?",
+              "vm": "आप {first} के वॉइसमेल पर पहुँचे हैं, बीप के बाद संदेश छोड़ें।"},
+    "bn-IN": {"RPC_CONFIRMED": "হ্যাঁ, আমিই {name}। বলুন।", "CPC_CONFIRMED": "না, আমি ওঁর স্ত্রী বলছি। আমার স্বামী এখন বাড়িতে নেই।",
+              "CALLBACK_REQUESTED": "আমি এখন ব্যস্ত, পরে ফোন করুন।", "FINAL_DENIAL": "ভুল নম্বর, আমি কোনো {first}-কে চিনি না।",
+              "HOSTILE": "বাজে কথা বন্ধ করুন, পাগল নাকি? বারবার ফোন করেন!", "DECEASED_CASE": "{first} গত মাসে মারা গেছেন।",
+              "DNC_ESCALATION": "এই নম্বরে আর ফোন করবেন না, নইলে অভিযোগ করব।", "ambiguous": "কে বলছেন? কেন?",
+              "vm": "আপনি {first}-এর ভয়েসমেলে পৌঁছেছেন, বিপ শব্দের পর বার্তা রেখে যান।"},
 }
-SCENARIOS = [("confirm", 34), ("deny", 18), ("ambiguous", 12), ("voicemail", 14), ("no_answer", 10), ("failed", 12)]
+SCENARIOS = [("RPC_CONFIRMED", 26), ("CPC_CONFIRMED", 8), ("CALLBACK_REQUESTED", 10), ("FINAL_DENIAL", 12),
+             ("ambiguous", 8), ("HOSTILE", 6), ("DECEASED_CASE", 5), ("DNC_ESCALATION", 5),
+             ("voicemail", 8), ("no_answer", 6), ("failed", 6)]
+CLOSE_FOR = {"RPC_CONFIRMED": "confirmed_close", "CPC_CONFIRMED": "cpc_close", "CALLBACK_REQUESTED": "callback_close",
+             "FINAL_DENIAL": "denial_close", "ambiguous": "denial_close", "HOSTILE": "hostile_close",
+             "DECEASED_CASE": "deceased_close", "DNC_ESCALATION": "dnc_close"}
 
 
 def simulate_outcome(contact: Contact, lines: dict) -> dict:
-    lang = SIM_CUSTOMER.get(contact.language, SIM_CUSTOMER["en-US"])
+    lang = SIM_CUSTOMER.get(contact.language, SIM_CUSTOMER["hi-IN"])
     name, first = contact.name, contact.name.split()[0]
     scenario = random.choices([s for s, _ in SCENARIOS], weights=[w for _, w in SCENARIOS])[0]
     if scenario == "failed":
         return {"ended_reason": random.choice(["twilio-failed-to-connect-call", "call.start.error-invalid-number"]),
                 "turns": [], "duration": 0.0}
     if scenario == "no_answer":
-        return {"ended_reason": "customer-did-not-answer", "turns": [], "duration": 0.0}
+        return {"ended_reason": random.choice(["customer-did-not-answer", "customer-busy"]), "turns": [], "duration": 0.0}
     if scenario == "voicemail":
         return {"ended_reason": "voicemail", "turns": [{"role": "customer", "text": lang["vm"].format(first=first), "t": 0.5}],
                 "duration": round(random.uniform(6, 12), 1)}
     turns = [{"role": "agent", "text": lines["opening"], "t": 0.4}]
-    if scenario == "confirm":
-        turns += [{"role": "customer", "text": lang["confirm"].format(name=name), "t": 4.2},
-                  {"role": "agent", "text": lines["confirmed"], "t": 5.0}]
-    elif scenario == "deny":
-        turns += [{"role": "customer", "text": lang["deny"], "t": 4.0}, {"role": "agent", "text": lines["wrong"], "t": 4.9}]
+    if scenario == "ambiguous":
+        turns += [{"role": "customer", "text": lang["ambiguous"], "t": 4.0}, {"role": "agent", "text": lines["clarify"], "t": 4.8},
+                  {"role": "customer", "text": lang["ambiguous"], "t": 9.1}]
     else:
-        amb = random.choice(["who", "depends", "speaking"])
-        turns += [{"role": "customer", "text": lang[amb], "t": 3.8}, {"role": "agent", "text": lines["clarify"], "t": 4.6},
-                  {"role": "customer", "text": lang["who"], "t": 9.1}, {"role": "agent", "text": lines["wrong"], "t": 9.8}]
-    reason = "assistant-ended-call" if scenario != "ambiguous" else "customer-ended-call"
-    return {"ended_reason": reason, "turns": turns, "duration": round(turns[-1]["t"] + random.uniform(1, 3), 1)}
+        turns += [{"role": "customer", "text": lang[scenario].format(name=name, first=first), "t": 4.2}]
+    turns.append({"role": "agent", "text": lines[CLOSE_FOR[scenario]], "t": turns[-1]["t"] + 1.0})
+    reason = "customer-ended-call" if scenario == "HOSTILE" else "assistant-ended-call"
+    return {"ended_reason": reason, "turns": turns, "duration": round(turns[-1]["t"] + random.uniform(2, 4), 1)}
 
 
 async def run_simulated_call(db, attempt: CallAttempt, contact: Contact, lines: dict):
@@ -192,17 +223,20 @@ async def run_simulated_call(db, attempt: CallAttempt, contact: Contact, lines: 
 
 # ---------- Placing calls ----------
 async def place_call(db, campaign: Campaign, contact: Contact, settings: Settings):
-    name = sanitize_name(contact.name)
-    lines = script_lines(contact.language, name, settings.company_name)
+    contact.language = resolve_language(contact.state, settings.state_language_rules, settings.fallback_language)
+    variables = call_variables(campaign, contact)
+    lines = script_lines(settings, contact.language, variables)
     live = settings.call_mode == "live"
     attempt = CallAttempt(campaign_id=campaign.id, contact_id=contact.id, attempt_number=contact.attempts,
-                          mode="live" if live else "simulation", customer_name=name, phone=contact.phone,
-                          language=contact.language, voice_id=resolve_voice(settings, campaign, contact.language),
+                          mode="live" if live else "simulation", customer_name=variables["customer_name"],
+                          phone=contact.phone, bank_name=contact.bank_name, state=contact.state,
+                          agent_name=campaign.agent_name, language=contact.language,
+                          voice_id=resolve_voice(settings, campaign, contact.language),
                           opening_line=lines["opening"], provider_status="queued")
     res = await db.call_attempts.insert_one(attempt.to_mongo())
     attempt.id = str(res.inserted_id)
-    await db.contacts.update_one({"_id": ObjectId(contact.id)},
-                                 {"$set": {"last_attempt_id": attempt.id, "last_called_at": now_iso()}})
+    await db.contacts.update_one({"_id": ObjectId(contact.id)}, {"$set": {
+        "last_attempt_id": attempt.id, "last_called_at": now_iso(), "language": contact.language}})
     if not live:
         asyncio.create_task(run_simulated_call(db, attempt, contact, lines))
         return
@@ -253,11 +287,14 @@ async def poll_stale_live_calls(db, settings: Settings):
                 await db.call_attempts.update_one({"_id": ObjectId(attempt.id)}, {"$set": {"provider_status": call.get("status")}})
                 continue
             artifact = call.get("artifact") or {}
+            analysis = call.get("analysis") or {}
             await finalize_attempt(db, attempt.id, ended_reason=call.get("endedReason"),
                                    turns=parse_vapi_messages(artifact.get("messages") or call.get("messages")),
                                    recording_url=artifact.get("recordingUrl") or call.get("recordingUrl"),
                                    duration=_duration(call.get("startedAt"), call.get("endedAt")),
-                                   started_at=call.get("startedAt"), ended_at=call.get("endedAt"), source="poll")
+                                   started_at=call.get("startedAt"), ended_at=call.get("endedAt"), source="poll",
+                                   agent_disposition=(analysis.get("structuredData") or {}).get("disposition"),
+                                   agent_summary=analysis.get("summary") or "")
 
 
 def _duration(start, end):

@@ -9,13 +9,19 @@ export const errMsg = (e) => {
   return d || e?.message || "Request failed";
 };
 
-export const DISPOSITIONS = ["RPI_CONFIRMED", "WRONG_PARTY", "NO_ANSWER_VOICEMAIL", "FAILED_NUMBER"];
+export const DISPOSITIONS = ["RPC_CONFIRMED", "CPC_CONFIRMED", "CALLBACK_REQUESTED", "FINAL_DENIAL",
+  "Final Denial Closing", "HOSTILE", "DECEASED_CASE", "DNC_ESCALATION"];
 
 export const LANGUAGES = [
-  { code: "en-US", label: "English (US)" },
-  { code: "es-US", label: "Español (US)" },
-  { code: "fr-CA", label: "Français (CA)" },
+  { code: "en-IN", label: "English" },
+  { code: "bn-IN", label: "Bengali" },
+  { code: "hi-IN", label: "Hindi" },
 ];
+
+export const SCRIPT_KEYS = ["opening", "clarify", "confirmed_close", "cpc_close", "callback_close", "denial_close",
+  "hostile_close", "deceased_close", "dnc_close"];
+
+export const recordingUrl = (attemptId) => `${process.env.REACT_APP_BACKEND_URL}/api/recordings/${attemptId}`;
 
 export const fmtTime = (iso) => (iso ? new Date(iso).toLocaleString() : "—");
 

@@ -2,7 +2,7 @@ import { Bot, Copy, Mic, User } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { api, fmtTime, usePoll } from "@/lib/api";
+import { api, fmtTime, recordingUrl, usePoll } from "@/lib/api";
 import { DispositionBadge, StatusBadge } from "@/components/rpi/Badges";
 
 const Row = ({ k, v, mono, testId }) => (
@@ -47,6 +47,9 @@ const Attempt = ({ a }) => (
       <Row k="Provider call ID" mono testId="vapi-call-id-badge" v={a.provider_call_id ? (
         <button className="inline-flex items-center gap-1 hover:text-blue-300" onClick={() => { navigator.clipboard?.writeText(a.provider_call_id); toast.success("Copied"); }}>
           {a.provider_call_id.slice(0, 18)}… <Copy className="h-3 w-3" /></button>) : a.mode === "simulation" ? "simulated" : "—"} />
+      <Row k="Call status" mono v={a.call_status} testId="attempt-call-status" />
+      <Row k="Category" v={a.category} testId="attempt-category" />
+      <Row k="Agent" v={`${a.agent_name} · ${a.language}`} />
       <Row k="Provider status" mono v={a.provider_status} testId="attempt-provider-status" />
       <Row k="Ended reason" mono v={a.ended_reason} testId="attempt-ended-reason" />
       <Row k="Created" v={fmtTime(a.created_at)} />
@@ -56,6 +59,12 @@ const Attempt = ({ a }) => (
       <Row k="Voice profile" mono v={a.voice_id} />
       <Row k="Callbacks received" mono v={a.webhook_events} />
     </div>
+    {a.summary && (
+      <div className="mt-3 rounded-md border border-slate-800 bg-[#0B0F17] p-3 text-xs" data-testid="attempt-summary">
+        <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">Summary</div>
+        <p className="text-slate-200">{a.summary}</p>
+      </div>
+    )}
     {a.classification && (
       <div className="mt-3 rounded-md border border-slate-800 bg-[#0B0F17] p-3 text-xs" data-testid="attempt-classification">
         <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
@@ -68,7 +77,7 @@ const Attempt = ({ a }) => (
     {a.error && <p className="mt-2 font-mono text-[11px] text-rose-400">{a.error}</p>}
     <div className="mt-4">
       <div className="mb-2 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500"><Mic className="h-3 w-3" /> Recording</div>
-      {a.recording_url ? <audio controls src={a.recording_url} className="h-9 w-full" data-testid="call-recording-audio" />
+      {a.recording_url ? <audio controls src={recordingUrl(a.id)} className="h-9 w-full" data-testid="call-recording-audio" />
         : <p className="text-xs text-slate-500" data-testid="call-recording-empty">No recording available{a.mode === "simulation" ? " (simulated call)" : ""}.</p>}
     </div>
     <div className="mt-4">
@@ -87,7 +96,7 @@ export const CallDetailSheet = ({ contactId, onClose }) => {
         <SheetHeader className="border-b border-slate-800 p-6">
           <SheetTitle className="font-display text-slate-100" data-testid="drawer-contact-name">{c?.name || "Loading…"}</SheetTitle>
           <SheetDescription className="font-mono text-xs">
-            {c?.phone} {c?.customer_id && `· ${c.customer_id}`} {c && `· ${c.language}`}
+            {c?.phone} {c?.bank_name && `· ${c.bank_name}`} {c?.state && `· ${c.state}`} {c && `· ${c.language}`}
           </SheetDescription>
           {c && <div className="flex gap-2 pt-1"><StatusBadge value={c.status} testId="drawer-contact-status" /><DispositionBadge value={c.disposition} testId="drawer-contact-disposition" /></div>}
         </SheetHeader>

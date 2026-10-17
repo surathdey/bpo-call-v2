@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import io
+import json
 import logging
 import os
 import secrets
@@ -19,9 +20,10 @@ from starlette.middleware.cors import CORSMiddleware
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-from models import (DISPOSITIONS, AuditLog, CallAttempt, Campaign, CampaignCreate, CampaignUpdate,  # noqa: E402
-                    Contact, RetryRequest, Settings, SettingsUpdate, now_iso)
-from rpi_engine import (LANGUAGES, build_system_prompt, normalize_phone, sanitize_prompt,  # noqa: E402
+from models import (DISPOSITIONS, UNREACHED_STATUSES, AuditLog, CallAttempt, Campaign, CampaignCreate,  # noqa: E402
+                    CampaignUpdate, Contact, RetryRequest, Settings, SettingsUpdate, now_iso)
+from defaults import LEGACY_DISPOSITION_MAP, SCRIPT_KEYS  # noqa: E402
+from rpi_engine import (LANGUAGES, build_system_prompt, normalize_phone, resolve_language, sanitize_prompt,  # noqa: E402
                         script_lines, validate_csv)
 import call_service as cs  # noqa: E402
 
@@ -63,10 +65,10 @@ async def campaign_stats(campaign_id: Optional[str] = None) -> dict:
         stats["total"] += row["n"]
         stats[row["_id"]["s"]] = stats.get(row["_id"]["s"], 0) + row["n"]
         if row["_id"].get("d"):
-            stats[row["_id"]["d"]] += row["n"]
+            stats[row["_id"]["d"]] = stats.get(row["_id"]["d"], 0) + row["n"]
         stats["review_required"] += row["r"]
     done = sum(stats[d] for d in DISPOSITIONS)
-    stats["rpi_rate"] = round(stats["RPI_CONFIRMED"] / done * 100, 1) if done else 0.0
+    stats["rpi_rate"] = round(stats["RPC_CONFIRMED"] / done * 100, 1) if done else 0.0
     dur = await db.call_attempts.aggregate([{"$match": {**match, "duration_seconds": {"$gt": 0}}},
                                             {"$group": {"_id": None, "avg": {"$avg": "$duration_seconds"}}}]).to_list(1)
     stats["avg_duration"] = round(dur[0]["avg"], 1) if dur else 0.0
@@ -94,6 +96,38 @@ async def read_settings():
     return public_settings(s)
 
 
+def validate_settings_changes(changes: dict):
+    langs = set(LANGUAGES)
+    if changes.get("fallback_language") not in (None, *langs):
+        raise HTTPException(400, "fallback_language must be one of " + ", ".join(langs))
+    if "state_language_rules" in changes:
+        seen = set()
+        for r in changes["state_language_rules"]:
+            r["state"] = r["state"].strip()
+            key = r["state"].lower()
+            if not key or r["language"] not in langs:
+                raise HTTPException(400, f"Invalid state rule: {r}")
+            if key in seen:
+                raise HTTPException(400, f"Duplicate state rule: {r['state']}")
+            seen.add(key)
+    if "voice_profiles" in changes and sorted(v["language"] for v in changes["voice_profiles"]) != sorted(langs):
+        raise HTTPException(400, "Exactly three voice profiles are required: English, Bengali, Hindi")
+    if "dispositions" in changes and sorted(d["code"] for d in changes["dispositions"]) != sorted(DISPOSITIONS):
+        raise HTTPException(400, "Disposition codes are canonical; only category, description and closing line can change")
+    if "dispositions" in changes and any(d["close"] not in SCRIPT_KEYS for d in changes["dispositions"]):
+        raise HTTPException(400, "Invalid closing line key")
+    if changes.get("unreached_disposition") not in (None, *DISPOSITIONS):
+        raise HTTPException(400, "unreached_disposition must be a canonical disposition")
+    if "script_templates" in changes:
+        if set(changes["script_templates"]) - langs:
+            raise HTTPException(400, "Script templates only for en-IN, bn-IN, hi-IN")
+        for lang, lines in changes["script_templates"].items():
+            if set(lines) - set(SCRIPT_KEYS):
+                raise HTTPException(400, f"Unknown script line in {lang}")
+            if "{{agent_name}}" not in lines.get("opening", "{{agent_name}}"):
+                raise HTTPException(400, f"{lang} opening must include {{{{agent_name}}}}")
+
+
 @api.put("/settings")
 async def update_settings(body: SettingsUpdate):
     s = await cs.get_settings(db)
@@ -105,8 +139,7 @@ async def update_settings(body: SettingsUpdate):
         region = changes.get("default_region") or s.default_region
         changes["dnc_numbers"] = sorted({normalize_phone(n, region)[0] or n.strip()
                                          for n in changes["dnc_numbers"] if n.strip()})
-    if "voice_profiles" in changes:
-        changes["voice_profiles"] = [vp.model_dump() for vp in body.voice_profiles]
+    validate_settings_changes(changes)
     current = s.model_dump()
     changes = {k: v for k, v in changes.items() if current.get(k) != v}
     if key:
@@ -173,17 +206,14 @@ async def list_campaigns():
 @api.post("/campaigns")
 async def create_campaign(body: CampaignCreate):
     s = await cs.get_settings(db)
-    lang = body.language or s.default_language
-    if lang not in LANGUAGES:
-        raise HTTPException(400, "Unsupported language")
     if body.voice_gender not in (None, "male", "female"):
         raise HTTPException(400, "voice_gender must be male or female")
-    c = Campaign(name=body.name.strip(), description=body.description, language=lang,
-                 voice_gender=body.voice_gender or s.default_voice_gender, voice_id=body.voice_id.strip(),
+    c = Campaign(name=body.name.strip(), description=body.description, agent_name=body.agent_name.strip(),
+                 voice_gender=body.voice_gender or s.default_voice_gender,
                  prompt=body.prompt if body.prompt is not None else s.default_prompt)
     res = await db.campaigns.insert_one(c.to_mongo())
     c.id = str(res.inserted_id)
-    await cs.audit(db, "campaign_created", "campaign", c.id, c.id, name=c.name)
+    await cs.audit(db, "campaign_created", "campaign", c.id, c.id, name=c.name, agent_name=c.agent_name)
     return {**c.model_dump(), "stats": await campaign_stats(c.id)}
 
 
@@ -192,19 +222,22 @@ async def get_campaign(campaign_id: str):
     c = await load_campaign(campaign_id)
     s = await cs.get_settings(db)
     _, flags = sanitize_prompt(c.prompt)
-    sample = script_lines(c.language, "{customer_name}", s.company_name)
-    return {**c.model_dump(), "stats": await campaign_stats(c.id), "prompt_flags": flags, "script": sample,
-            "resolved_voice_id": cs.resolve_voice(s, c, c.language), "call_mode": s.call_mode}
+    variables = {"agent_name": c.agent_name or "{{agent_name}}", "bank_name": "{bank_name}", "customer_name": "{customer_name}"}
+    scripts = {lang: {**script_lines(s, lang, variables), "voice_id": cs.resolve_voice(s, c, lang),
+                      "label": LANGUAGES[lang]["label"]} for lang in LANGUAGES}
+    return {**c.model_dump(), "stats": await campaign_stats(c.id), "prompt_flags": flags, "scripts": scripts,
+            "state_rules": [r.model_dump() for r in s.state_language_rules], "fallback_language": s.fallback_language,
+            "call_mode": s.call_mode}
 
 
 @api.patch("/campaigns/{campaign_id}")
 async def update_campaign(campaign_id: str, body: CampaignUpdate):
     c = await load_campaign(campaign_id)
     changes = body.model_dump(exclude_none=True)
-    if "language" in changes and changes["language"] not in LANGUAGES:
-        raise HTTPException(400, "Unsupported language")
     if changes.get("voice_gender") not in (None, "male", "female"):
         raise HTTPException(400, "voice_gender must be male or female")
+    if "agent_name" in changes:
+        changes["agent_name"] = changes["agent_name"].strip()
     changes["updated_at"] = now_iso()
     await db.campaigns.update_one({"_id": oid(c.id)}, {"$set": changes})
     await cs.audit(db, "campaign_updated", "campaign", c.id, c.id, fields=sorted(changes))
@@ -212,11 +245,13 @@ async def update_campaign(campaign_id: str, body: CampaignUpdate):
 
 
 @api.get("/campaigns/{campaign_id}/prompt-preview")
-async def prompt_preview(campaign_id: str, name: str = "Jane Doe"):
+async def prompt_preview(campaign_id: str, name: str = "Ramesh Kumar", bank: str = "Sample Bank", state: str = ""):
     c = await load_campaign(campaign_id)
     s = await cs.get_settings(db)
     _, flags = sanitize_prompt(c.prompt)
-    return {"system_prompt": build_system_prompt(c.language, name, s.company_name, c.prompt), "flags": flags}
+    lang = resolve_language(state, s.state_language_rules, s.fallback_language)
+    variables = {"agent_name": c.agent_name, "bank_name": bank, "customer_name": name, "state": state}
+    return {"language": lang, "system_prompt": build_system_prompt(s, lang, variables, c.prompt), "flags": flags}
 
 
 async def _validation_report(campaign: Campaign, file: UploadFile) -> dict:
@@ -225,7 +260,7 @@ async def _validation_report(campaign: Campaign, file: UploadFile) -> dict:
         raise HTTPException(413, "CSV exceeds 5 MB")
     s = await cs.get_settings(db)
     existing = {d["phone"] for d in await db.contacts.find({"campaign_id": campaign.id}, {"phone": 1}).to_list(None)}
-    return validate_csv(content, s.default_region, campaign.language, existing, set(s.dnc_numbers))
+    return validate_csv(content, s.default_region, s, existing, set(s.dnc_numbers))
 
 
 @api.post("/campaigns/{campaign_id}/contacts/validate")
@@ -243,7 +278,7 @@ async def import_contacts(campaign_id: str, file: UploadFile = File(...)):
     if report["header_errors"] and not report["valid"]:
         raise HTTPException(400, "; ".join(report["header_errors"]))
     docs = [Contact(campaign_id=c.id, name=r["name"], phone=r["phone"], raw_phone=r["raw_phone"],
-                    customer_id=r["customer_id"], language=r["language"], warnings=r["warnings"],
+                    bank_name=r["bank_name"], state=r["state"], language=r["language"], warnings=r["warnings"],
                     status="queued" if c.status == "running" else "pending").to_mongo() for r in report["valid"]]
     if docs:
         await db.contacts.insert_many(docs)
@@ -268,7 +303,7 @@ async def list_contacts(campaign_id: str, disposition: Optional[str] = None, sta
     if q:
         import re as _re
         rx = {"$regex": _re.escape(q), "$options": "i"}
-        query["$or"] = [{"name": rx}, {"phone": rx}, {"customer_id": rx}]
+        query["$or"] = [{"name": rx}, {"phone": rx}, {"bank_name": rx}, {"state": rx}]
     docs = await db.contacts.find(query).sort("created_at", 1).to_list(limit)
     return [Contact.from_mongo(d).model_dump() for d in docs]
 
@@ -279,6 +314,8 @@ async def launch_campaign(campaign_id: str):
     s = await cs.get_settings(db)
     if s.call_mode == "live" and not (s.vapi_api_key_encrypted and s.phone_number_id):
         raise HTTPException(400, "Vapi is not configured. Add credentials in Settings or switch to simulation mode.")
+    if not c.agent_name.strip():
+        raise HTTPException(400, "Set the campaign agent name (Voice & script) before launching.")
     res = await db.contacts.update_many({"campaign_id": c.id, "status": "pending"}, {"$set": {"status": "queued"}})
     queued = await db.contacts.count_documents({"campaign_id": c.id, "status": "queued"})
     if queued == 0:
@@ -307,9 +344,11 @@ async def retry_contacts(campaign_id: str, body: RetryRequest):
     query = {"campaign_id": c.id, "status": "completed"}
     if body.contact_ids:
         query["_id"] = {"$in": [oid(i) for i in body.contact_ids]}
-        query["disposition"] = {"$ne": "RPI_CONFIRMED"}
-    else:
+        query["disposition"] = {"$ne": "RPC_CONFIRMED"}
+    elif body.dispositions:
         query["disposition"] = {"$in": [d for d in body.dispositions if d in DISPOSITIONS]}
+    else:
+        query["last_call_status"] = {"$in": [st for st in body.call_statuses if st in UNREACHED_STATUSES]}
     if not body.ignore_retry_limit:
         query["attempts"] = {"$lt": s.max_retries + 1}
     skipped = await db.contacts.count_documents({**{k: v for k, v in query.items() if k != "attempts"}}) - \
@@ -318,33 +357,69 @@ async def retry_contacts(campaign_id: str, body: RetryRequest):
     if res.modified_count and c.status in ("running", "completed"):
         await db.campaigns.update_one({"_id": oid(c.id)}, {"$set": {"status": "running", "updated_at": now_iso()}})
     await cs.audit(db, "contacts_retried", "campaign", c.id, c.id, requeued=res.modified_count,
-                   skipped_retry_limit=skipped, dispositions=body.dispositions)
+                   skipped_retry_limit=skipped, dispositions=body.dispositions or body.call_statuses)
     return {"requeued": res.modified_count, "skipped_retry_limit": skipped}
 
 
+EXPORT_COLUMNS = ["phone_number", "callee_name", "bank_name", "state", "Call ID", "Start Time", "End Time", "Duration",
+                  "Call Status", "Disposition", "Category", "Summary", "Transcript", "Recording"]
+
+
+def public_base(s: Settings, request: Request) -> str:
+    return (s.webhook_base_url or os.environ.get("PUBLIC_BASE_URL") or str(request.base_url)).rstrip("/")
+
+
 @api.get("/campaigns/{campaign_id}/export")
-async def export_contacts(campaign_id: str, disposition: Optional[str] = None):
+async def export_contacts(campaign_id: str, request: Request, disposition: Optional[str] = None):
     c = await load_campaign(campaign_id)
+    s = await cs.get_settings(db)
+    base = public_base(s, request)
     query = {"campaign_id": c.id}
     if disposition:
         query["disposition"] = disposition
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["customer_id", "name", "phone", "language", "status", "disposition", "review_required", "attempts",
-                "last_called_at", "ended_reason", "duration_seconds", "recording_url", "transcript"])
+    w.writerow(EXPORT_COLUMNS)
     async for d in db.contacts.find(query).sort("created_at", 1):
         ct = Contact.from_mongo(d)
-        transcript = ""
-        if ct.last_attempt_id:
-            att = await db.call_attempts.find_one({"_id": oid(ct.last_attempt_id)}, {"transcript_text": 1})
-            transcript = (att or {}).get("transcript_text", "")
-        w.writerow([ct.customer_id, ct.name, ct.phone, ct.language, ct.status, ct.disposition or "", ct.review_required,
-                    ct.attempts, ct.last_called_at or "", ct.last_ended_reason or "", ct.last_duration or "",
-                    ct.last_recording_url or "", transcript])
+        att = CallAttempt.from_mongo(await db.call_attempts.find_one({"_id": oid(ct.last_attempt_id)})) \
+            if ct.last_attempt_id else None
+        if not att:
+            w.writerow([ct.phone, ct.name, ct.bank_name, ct.state] + [""] * 4 + [ct.status, "", "", "", "", ""])
+            continue
+        transcript = json.dumps([{"role": t.get("role"), "text": t.get("text"), "t": t.get("t")} for t in att.transcript],
+                                ensure_ascii=False)
+        w.writerow([ct.phone, ct.name, ct.bank_name, ct.state, att.provider_call_id or att.id,
+                    att.started_at or att.created_at, att.ended_at or "", att.duration_seconds or 0,
+                    att.call_status or att.provider_status, att.disposition or "", att.category or "", att.summary,
+                    transcript, f"{base}/api/recordings/{att.id}" if att.recording_url else ""])
     await cs.audit(db, "campaign_exported", "campaign", c.id, c.id, disposition=disposition or "ALL")
-    fname = f"rpi_{c.name.replace(' ', '_')[:40]}_{disposition or 'all'}.csv"
-    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
+    fname = f"rpi_{c.name.replace(' ', '_')[:40]}_{(disposition or 'all').replace(' ', '_')}.csv"
+    return StreamingResponse(iter(["\ufeff" + buf.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+@api.get("/recordings/{attempt_id}")
+async def get_recording(attempt_id: str):
+    doc = await db.call_attempts.find_one({"_id": oid(attempt_id)}, {"recording_url": 1})
+    if not doc or not doc.get("recording_url"):
+        raise HTTPException(404, "Recording not available")
+    client_http = httpx.AsyncClient(timeout=60, follow_redirects=True)
+    upstream = await client_http.send(client_http.build_request("GET", doc["recording_url"]), stream=True)
+    if not upstream.is_success:
+        await upstream.aclose()
+        await client_http.aclose()
+        raise HTTPException(502, "Recording provider unavailable")
+
+    async def body():
+        try:
+            async for chunk in upstream.aiter_bytes():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client_http.aclose()
+    return StreamingResponse(body(), media_type=upstream.headers.get("content-type", "audio/wav"),
+                             headers={"Content-Disposition": f'inline; filename="recording_{attempt_id}.wav"'})
 
 
 @api.get("/contacts/{contact_id}")
@@ -387,6 +462,25 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
         return {"ok": True, "ignored": "unknown call"}
     attempt_id = str(doc["_id"])
     mtype = msg.get("type")
+    if mtype == "tool-calls":
+        results = []
+        for tc in msg.get("toolCallList") or msg.get("toolCalls") or []:
+            fn = tc.get("function") or {}
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    args = {}
+            if fn.get("name") == "file_disposition" and args.get("disposition") in DISPOSITIONS:
+                await db.call_attempts.update_one({"_id": doc["_id"], "finalized": False}, {"$set": {
+                    "agent_disposition": args["disposition"], "agent_summary": str(args.get("summary", ""))[:600]}})
+                await cs.audit(db, "agent_disposition_filed", "call_attempt", attempt_id, doc["campaign_id"],
+                               disposition=args["disposition"])
+                results.append({"toolCallId": tc.get("id"), "result": "Disposition recorded. Say the closing line and end the call."})
+            else:
+                results.append({"toolCallId": tc.get("id"), "result": "Invalid disposition; choose one from the list."})
+        return {"results": results}
     if mtype == "status-update":
         if not doc.get("finalized"):
             await db.call_attempts.update_one({"_id": doc["_id"], "finalized": False},
@@ -408,9 +502,12 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
                               "text": text.strip()})
     duration = msg.get("durationSeconds") or cs._duration(msg.get("startedAt") or call.get("startedAt"),
                                                            msg.get("endedAt") or call.get("endedAt") or "")
+    analysis = msg.get("analysis") or {}
     await cs.finalize_attempt(db, attempt_id, ended_reason=msg.get("endedReason"), turns=turns,
                               recording_url=recording, duration=duration, started_at=msg.get("startedAt"),
-                              ended_at=msg.get("endedAt"), source="webhook")
+                              ended_at=msg.get("endedAt"), source="webhook",
+                              agent_disposition=(analysis.get("structuredData") or {}).get("disposition"),
+                              agent_summary=analysis.get("summary") or "")
     return {"ok": True}
 
 
@@ -432,6 +529,24 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=os.envi
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
+async def migrate_legacy():
+    """One-time upgrade of v1 data (US/FR languages, 4 RPI dispositions) to the v2 configuration."""
+    doc = await db.settings.find_one({"_id": "global"}) or {}
+    unset = {k: "" for k in ("company_name", "default_language", "elevenlabs_model") if k in doc}
+    fix = {}
+    if doc.get("voice_profiles") and "female_voice_id" not in doc["voice_profiles"][0]:
+        fix["voice_profiles"] = [v.model_dump() for v in Settings().voice_profiles]
+    if doc.get("default_region") == "US":
+        fix["default_region"] = "IN"
+    if doc.get("calling_timezone") == "America/Toronto":
+        fix["calling_timezone"] = "Asia/Kolkata"
+    if fix or unset:
+        await db.settings.update_one({"_id": "global"}, {"$set": fix, **({"$unset": unset} if unset else {})}, upsert=True)
+    for old, new in LEGACY_DISPOSITION_MAP.items():
+        await db.contacts.update_many({"disposition": old}, {"$set": {"disposition": new}})
+        await db.call_attempts.update_many({"disposition": old}, {"$set": {"disposition": new}})
+
+
 @app.on_event("startup")
 async def startup():
     await db.contacts.create_index([("campaign_id", 1), ("status", 1)])
@@ -439,6 +554,7 @@ async def startup():
     await db.call_attempts.create_index("provider_call_id")
     await db.call_attempts.create_index("contact_id")
     await db.audit_logs.create_index([("created_at", -1)])
+    await migrate_legacy()
     # recover calls orphaned by a restart (simulation tasks are in-memory)
     async for a in db.call_attempts.find({"finalized": False, "mode": "simulation"}):
         await db.call_attempts.update_one({"_id": a["_id"]}, {"$set": {

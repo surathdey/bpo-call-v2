@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { api, errMsg, LANGUAGES } from "@/lib/api";
+import { api, errMsg, DISPOSITIONS } from "@/lib/api";
+import { DispositionsEditor, FallbackLanguage, ScriptsEditor, StateRulesEditor, VoiceProfilesTable } from "@/components/rpi/SettingsSections";
 
 const Section = ({ title, desc, children, testId }) => (
   <section className="rise grid gap-6 border-b border-slate-800 py-8 lg:grid-cols-[280px_1fr]" data-testid={testId}>
@@ -39,7 +40,6 @@ export default function SettingsPage() {
 
   const set = (k) => (v) => setS((p) => ({ ...p, [k]: v?.target ? v.target.value : v }));
   const num = (k) => (e) => setS((p) => ({ ...p, [k]: e.target.value === "" ? "" : Number(e.target.value) }));
-  const setVoice = (i, val) => setS((p) => ({ ...p, voice_profiles: p.voice_profiles.map((v, j) => (j === i ? { ...v, voice_id: val } : v)) }));
 
   const save = async () => {
     setSaving(true);
@@ -95,10 +95,9 @@ export default function SettingsPage() {
         <Field label="Phone Number ID" hint="Vapi phoneNumberId of an imported Twilio/Vonage/Telnyx number.">
           <Input className="font-mono" value={s.phone_number_id} onChange={set("phone_number_id")} data-testid="settings-phone-number-id-input" />
         </Field>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <Field label="LLM provider (Vapi)"><Input value={s.vapi_model_provider} onChange={set("vapi_model_provider")} data-testid="settings-vapi-model-provider-input" /></Field>
           <Field label="LLM model (Vapi)"><Input value={s.vapi_model} onChange={set("vapi_model")} data-testid="settings-vapi-model-input" /></Field>
-          <Field label="ElevenLabs model"><Input value={s.elevenlabs_model} onChange={set("elevenlabs_model")} data-testid="settings-elevenlabs-model-input" /></Field>
         </div>
         <Field label="Webhook base URL" hint="Public URL Vapi can reach. Defaults to this app's backend URL.">
           <Input className="font-mono" value={s.webhook_base_url} placeholder={process.env.REACT_APP_BACKEND_URL} onChange={set("webhook_base_url")} data-testid="settings-webhook-base-input" />
@@ -113,29 +112,11 @@ export default function SettingsPage() {
         <Button variant="outline" className="gap-2 border-slate-700" onClick={test} data-testid="settings-test-vapi-btn"><PlugZap className="h-4 w-4" />Test Vapi connection</Button>
       </Section>
 
-      <Section title="Voice profiles" desc="Stored as ElevenLabs voice IDs per language × gender — not just a male/female label." testId="settings-voices-section">
-        <div className="overflow-hidden rounded-lg border border-slate-800">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-900/80 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-              <tr><th className="p-2.5 text-left">Language</th><th className="p-2.5 text-left">Gender</th><th className="p-2.5 text-left">Label</th><th className="p-2.5 text-left">Voice ID</th></tr>
-            </thead>
-            <tbody>
-              {s.voice_profiles.map((v, i) => (
-                <tr key={`${v.language}-${v.gender}`} className="border-t border-slate-800">
-                  <td className="p-2.5 font-mono text-xs">{v.language}</td>
-                  <td className="p-2.5 text-xs capitalize">{v.gender}</td>
-                  <td className="p-2.5 text-xs text-slate-400">{v.label}</td>
-                  <td className="p-2"><Input className="h-8 font-mono text-xs" value={v.voice_id} onChange={(e) => setVoice(i, e.target.value)} data-testid={`settings-voice-${v.language}-${v.gender}`} /></td>
-                </tr>))}
-            </tbody>
-          </table>
-        </div>
-        <div className="grid gap-4 md:grid-cols-3">
-          <Field label="Default language">
-            <Select value={s.default_language} onValueChange={set("default_language")}>
-              <SelectTrigger data-testid="settings-default-language-select"><SelectValue /></SelectTrigger>
-              <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l.code} value={l.code}>{l.label}</SelectItem>)}</SelectContent>
-            </Select>
+      <Section title="Voice profiles" desc="Exactly three profiles: English, Bengali, Hindi. Each sets the ElevenLabs voice (TTS) and the transcriber (STT) so the agent speaks and understands that language." testId="settings-voices-section">
+        <VoiceProfilesTable profiles={s.voice_profiles} onChange={set("voice_profiles")} />
+        <div className="grid gap-4 md:grid-cols-4">
+          <Field label="Default agent name" hint="Prefills new campaigns. Spoken as {{agent_name}}.">
+            <Input value={s.default_agent_name} placeholder="e.g. Ria" onChange={set("default_agent_name")} data-testid="settings-default-agent-name-input" />
           </Field>
           <Field label="Default voice gender">
             <Select value={s.default_voice_gender} onValueChange={set("default_voice_gender")}>
@@ -143,13 +124,40 @@ export default function SettingsPage() {
               <SelectContent><SelectItem value="female">Female</SelectItem><SelectItem value="male">Male</SelectItem></SelectContent>
             </Select>
           </Field>
-          <Field label="Company name (spoken)"><Input value={s.company_name} onChange={set("company_name")} data-testid="settings-company-name-input" /></Field>
+          <Field label="Voice stability" hint="Lower = more expressive">
+            <Input type="number" step="0.05" min="0" max="1" className="font-mono" value={s.voice_stability} onChange={num("voice_stability")} data-testid="settings-voice-stability-input" />
+          </Field>
+          <Field label="Voice style / emotion" hint="Higher = more emotional">
+            <Input type="number" step="0.05" min="0" max="1" className="font-mono" value={s.voice_style} onChange={num("voice_style")} data-testid="settings-voice-style-input" />
+          </Field>
         </div>
       </Section>
 
-      <Section title="AI agent prompt" desc="Default style notes for new campaigns. Hard RPI rules are always appended above it." testId="settings-prompt-section">
-        <Textarea rows={5} value={s.default_prompt} onChange={set("default_prompt")} data-testid="settings-prompt-textarea" />
-        <Field label="RPI confirmation confidence threshold" hint="Classifier must reach this confidence to mark RPI_CONFIRMED; below it the call is downgraded and flagged for review.">
+      <Section title="State → language rule" desc="Each contact's state/province picks the call language. States not listed use the fallback." testId="settings-state-rules-section">
+        <StateRulesEditor rules={s.state_language_rules} onChange={set("state_language_rules")} />
+        <Field label="Fallback language (all other states)"><FallbackLanguage value={s.fallback_language} onChange={set("fallback_language")} /></Field>
+      </Section>
+
+      <Section title="Script templates" desc="Intro and closing lines per language. Variables: {{agent_name}}, {{bank_name}}, {{customer_name}}." testId="settings-scripts-section">
+        <ScriptsEditor templates={s.script_templates} onChange={set("script_templates")} />
+      </Section>
+
+      <Section title="Disposition buckets" desc="Eight canonical codes. The agent picks one per call using these rules; category feeds the export." testId="settings-dispositions-section">
+        <DispositionsEditor items={s.dispositions} onChange={set("dispositions")} />
+        <Field label="Bucket for unreached calls" hint="Used when the call never connects (no answer, voicemail, busy, failed). Call Status keeps the provider state.">
+          <Select value={s.unreached_disposition} onValueChange={set("unreached_disposition")}>
+            <SelectTrigger className="w-64" data-testid="settings-unreached-disposition-select"><SelectValue /></SelectTrigger>
+            <SelectContent>{DISPOSITIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>
+      </Section>
+
+      <Section title="AI agent prompt & emotion" desc="Default style notes for new campaigns, plus the tone rules every call follows. Hard RPI rules always take precedence." testId="settings-prompt-section">
+        <Textarea rows={3} value={s.default_prompt} onChange={set("default_prompt")} data-testid="settings-prompt-textarea" />
+        <Field label="Emotion & tone guidelines" hint="Warm by default, condolences on death, calm & apologetic when hostile, cheerful when friendly.">
+          <Textarea rows={7} value={s.emotion_guidelines} onChange={set("emotion_guidelines")} data-testid="settings-emotion-textarea" />
+        </Field>
+        <Field label="RPC confirmation confidence threshold" hint="If the classifier picks RPC_CONFIRMED below this confidence, the call goes to the unreached bucket and is flagged for review.">
           <Input type="number" step="0.05" min="0.5" max="1" className="w-32 font-mono" value={s.confirm_confidence_threshold} onChange={num("confirm_confidence_threshold")} data-testid="settings-confidence-input" />
         </Field>
       </Section>

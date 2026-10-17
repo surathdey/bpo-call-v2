@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { api, errMsg } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-const REQUIRED = ["name", "phone"];
+const REQUIRED = ["phone_number", "name", "bank_name", "state"];
 
 const quickHeaderCheck = async (file) => {
   const head = (await file.slice(0, 2048).text()).split(/\r?\n/)[0].toLowerCase();
@@ -74,7 +74,7 @@ export const UploadDialog = ({ open, onOpenChange, campaignId, onImported }) => 
         <DialogHeader>
           <DialogTitle className="font-display">Upload contact batch</DialogTitle>
           <DialogDescription>
-            Columns: <code className="text-blue-300">name, phone</code> (required) · <code className="text-slate-400">customer_id, language</code> (optional). Phones normalised to E.164.
+            Exactly 4 columns: <code className="text-blue-300">phone_number, name, bank_name, state/province</code>. Rows without phone_number are rejected. Language is picked from state/province.
           </DialogDescription>
         </DialogHeader>
         {!report ? (
@@ -114,14 +114,16 @@ export const UploadDialog = ({ open, onOpenChange, campaignId, onImported }) => 
               <ScrollArea className="h-56 rounded-md border border-slate-800">
                 <table className="w-full text-xs" data-testid="csv-invalid-table">
                   <thead className="sticky top-0 bg-slate-900 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                    <tr><th className="p-2 text-left">Row</th><th className="p-2 text-left">Name</th><th className="p-2 text-left">Phone</th><th className="p-2 text-left">Reason</th></tr>
+                    <tr><th className="p-2 text-left">Row</th><th className="p-2 text-left">Phone number</th><th className="p-2 text-left">Name</th><th className="p-2 text-left">Bank</th><th className="p-2 text-left">State</th><th className="p-2 text-left">Error</th></tr>
                   </thead>
                   <tbody>
                     {report.invalid.map((r) => (
-                      <tr key={r.row} className="border-t border-slate-800/70">
+                      <tr key={r.row} className="border-t border-slate-800/70" data-testid={`csv-error-row-${r.row}`}>
                         <td className="p-2 font-mono text-slate-500">{r.row}</td>
+                        <td className="p-2 font-mono">{r.raw_phone || <em className="text-rose-400">missing</em>}</td>
                         <td className="p-2">{r.name || <em className="text-slate-600">blank</em>}</td>
-                        <td className="p-2 font-mono">{r.raw_phone || "—"}</td>
+                        <td className="p-2">{r.bank_name || "—"}</td>
+                        <td className="p-2">{r.state || "—"}</td>
                         <td className="p-2 text-rose-300">{r.reasons.join("; ")}</td>
                       </tr>))}
                   </tbody>

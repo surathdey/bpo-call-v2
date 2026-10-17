@@ -6,7 +6,11 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 PyObjectId = Annotated[str, BeforeValidator(lambda v: str(v) if isinstance(v, ObjectId) else v)]
 
-DISPOSITIONS = ["RPI_CONFIRMED", "WRONG_PARTY", "NO_ANSWER_VOICEMAIL", "FAILED_NUMBER"]
+from defaults import (DEFAULT_DISPOSITIONS, DEFAULT_EMOTION, DEFAULT_SCRIPTS, DEFAULT_STATE_RULES,  # noqa: E402
+                      DEFAULT_VOICE_PROFILES, DISPOSITION_CODES)
+
+DISPOSITIONS = DISPOSITION_CODES
+UNREACHED_STATUSES = ["no-answer", "voicemail", "busy", "failed"]
 
 
 def now_iso() -> str:
@@ -32,7 +36,8 @@ class Campaign(BaseDocument):
     name: str
     description: str = ""
     status: str = "draft"  # draft | running | paused | completed
-    language: str = "en-US"
+    agent_name: str = ""
+    language: str = ""
     voice_gender: str = "female"
     voice_id: str = ""
     prompt: str = ""
@@ -47,8 +52,13 @@ class Contact(BaseDocument):
     phone: str
     raw_phone: str = ""
     customer_id: str = ""
-    language: str = "en-US"
+    bank_name: str = ""
+    state: str = ""
+    language: str = ""
     status: str = "pending"  # pending | queued | calling | completed
+    last_call_status: Optional[str] = None
+    last_category: Optional[str] = None
+    last_summary: Optional[str] = None
     disposition: Optional[str] = None
     review_required: bool = False
     attempts: int = 0
@@ -76,9 +86,17 @@ class CallAttempt(BaseDocument):
     mode: str = "simulation"
     customer_name: str = ""
     phone: str = ""
-    language: str = "en-US"
+    bank_name: str = ""
+    state: str = ""
+    agent_name: str = ""
+    language: str = ""
     voice_id: str = ""
     opening_line: str = ""
+    call_status: Optional[str] = None  # completed | no-answer | voicemail | busy | failed
+    category: Optional[str] = None
+    summary: str = ""
+    agent_disposition: Optional[str] = None
+    agent_summary: str = ""
     provider_call_id: Optional[str] = None
     provider_status: str = "initiated"
     ended_reason: Optional[str] = None
@@ -110,19 +128,25 @@ class AuditLog(BaseDocument):
 
 class VoiceProfile(BaseModel):
     language: str
-    gender: str
-    voice_id: str
-    label: str = ""
+    label: str
+    female_voice_id: str = ""
+    male_voice_id: str = ""
+    tts_model: str = "eleven_multilingual_v2"
+    stt_provider: str = "deepgram"
+    stt_model: str = "nova-3"
+    stt_language: str = ""
 
 
-DEFAULT_VOICES = [
-    VoiceProfile(language="en-US", gender="female", voice_id="21m00Tcm4TlvDq8ikWAM", label="Rachel"),
-    VoiceProfile(language="en-US", gender="male", voice_id="pNInz6obpgDQGcFmaJgB", label="Adam"),
-    VoiceProfile(language="es-US", gender="female", voice_id="EXAVITQu4vr4xnSDxMaL", label="Sarah (multilingual)"),
-    VoiceProfile(language="es-US", gender="male", voice_id="ErXwobaYiN019PkySvjV", label="Antoni (multilingual)"),
-    VoiceProfile(language="fr-CA", gender="female", voice_id="XB0fDUnXU5powFXDhCwa", label="Charlotte (multilingual)"),
-    VoiceProfile(language="fr-CA", gender="male", voice_id="onwK4e9ZLuTAKqWW03F9", label="Daniel (multilingual)"),
-]
+class StateRule(BaseModel):
+    state: str = Field(min_length=1)
+    language: str
+
+
+class DispositionDef(BaseModel):
+    code: str
+    category: str = ""
+    description: str = ""
+    close: str = "denial_close"
 
 
 class Settings(BaseModel):
@@ -135,22 +159,28 @@ class Settings(BaseModel):
     webhook_token: str = ""
     vapi_model_provider: str = "openai"
     vapi_model: str = "gpt-4o"
-    elevenlabs_model: str = "eleven_turbo_v2_5"
-    company_name: str = "RevLoop"
-    default_language: str = "en-US"
+    default_agent_name: str = ""
+    fallback_language: str = "hi-IN"
+    state_language_rules: List[StateRule] = Field(default_factory=lambda: [StateRule(**r) for r in DEFAULT_STATE_RULES])
     default_voice_gender: str = "female"
-    default_prompt: str = "Be warm, brief and professional. Speak clearly and at a calm pace."
-    voice_profiles: List[VoiceProfile] = Field(default_factory=lambda: list(DEFAULT_VOICES))
+    default_prompt: str = "Keep the call short and respectful."
+    emotion_guidelines: str = DEFAULT_EMOTION
+    voice_stability: float = 0.4
+    voice_style: float = 0.35
+    voice_profiles: List[VoiceProfile] = Field(default_factory=lambda: [VoiceProfile(**v) for v in DEFAULT_VOICE_PROFILES])
+    script_templates: Dict[str, Dict[str, str]] = Field(default_factory=lambda: {k: dict(v) for k, v in DEFAULT_SCRIPTS.items()})
+    dispositions: List[DispositionDef] = Field(default_factory=lambda: [DispositionDef(**d) for d in DEFAULT_DISPOSITIONS])
+    unreached_disposition: str = "Final Denial Closing"
     max_retries: int = 2
     max_concurrent_calls: int = 3
     max_call_duration_seconds: int = 120
     confirm_confidence_threshold: float = 0.8
-    default_region: str = "US"
+    default_region: str = "IN"
     dnc_numbers: List[str] = []
     enforce_calling_hours: bool = False
     calling_hours_start: int = 9
     calling_hours_end: int = 21
-    calling_timezone: str = "America/Toronto"
+    calling_timezone: str = "Asia/Kolkata"
     updated_at: Optional[str] = None
 
 
@@ -161,12 +191,18 @@ class SettingsUpdate(BaseModel):
     webhook_base_url: Optional[str] = None
     vapi_model_provider: Optional[str] = None
     vapi_model: Optional[str] = None
-    elevenlabs_model: Optional[str] = None
-    company_name: Optional[str] = None
-    default_language: Optional[str] = None
+    default_agent_name: Optional[str] = None
+    fallback_language: Optional[str] = None
+    state_language_rules: Optional[List[StateRule]] = None
     default_voice_gender: Optional[str] = None
     default_prompt: Optional[str] = None
+    emotion_guidelines: Optional[str] = None
+    voice_stability: Optional[float] = Field(default=None, ge=0, le=1)
+    voice_style: Optional[float] = Field(default=None, ge=0, le=1)
     voice_profiles: Optional[List[VoiceProfile]] = None
+    script_templates: Optional[Dict[str, Dict[str, str]]] = None
+    dispositions: Optional[List[DispositionDef]] = None
+    unreached_disposition: Optional[str] = None
     max_retries: Optional[int] = Field(default=None, ge=0, le=10)
     max_concurrent_calls: Optional[int] = Field(default=None, ge=1, le=50)
     max_call_duration_seconds: Optional[int] = Field(default=None, ge=30, le=900)
@@ -182,22 +218,21 @@ class SettingsUpdate(BaseModel):
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
-    language: Optional[str] = None
+    agent_name: str = Field(min_length=1, max_length=40)
     voice_gender: Optional[str] = None
-    voice_id: str = ""
     prompt: Optional[str] = None
 
 
 class CampaignUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    language: Optional[str] = None
+    agent_name: Optional[str] = Field(default=None, min_length=1, max_length=40)
     voice_gender: Optional[str] = None
-    voice_id: Optional[str] = None
     prompt: Optional[str] = None
 
 
 class RetryRequest(BaseModel):
-    dispositions: List[str] = ["FAILED_NUMBER", "NO_ANSWER_VOICEMAIL"]
+    call_statuses: List[str] = UNREACHED_STATUSES
+    dispositions: List[str] = []
     contact_ids: List[str] = []
     ignore_retry_limit: bool = False
