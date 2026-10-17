@@ -87,7 +87,7 @@ export default function CampaignDetailPage() {
       const res = await api.get(`/campaigns/${id}/export`, { params: { disposition: filter && filter !== "NONE" ? filter : undefined }, responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
-      a.href = url; a.download = `rpi_${c?.name || id}_${filter || "all"}.csv`; a.click();
+      a.href = url; a.download = `rpi_${c?.name || id}_${filter || "all"}.csv`.replace(/\s+/g, "_"); a.click();
       URL.revokeObjectURL(url);
       toast.success("Export downloaded");
     } catch (e) { toast.error(errMsg(e)); }

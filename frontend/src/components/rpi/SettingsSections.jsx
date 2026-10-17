@@ -30,7 +30,7 @@ export const VoiceProfilesTable = ({ profiles, onChange }) => {
             <tr key={p.language} className="border-t border-slate-800">
               <td className="whitespace-nowrap p-2.5 text-xs font-medium text-slate-200">{p.label} <span className="font-mono text-slate-500">{p.language}</span></td>
               {cols.map(([k]) => (
-                <td key={k} className="p-1.5"><Input className={`${cell} min-w-[110px]`} value={p[k]} onChange={(e) => set(i, k, e.target.value)}
+                <td key={k} className="p-1.5"><Input className={`${cell} ${k.endsWith("voice_id") ? "min-w-[190px]" : "min-w-[90px]"}`} value={p[k]} onChange={(e) => set(i, k, e.target.value)}
                   data-testid={`voice-${p.language}-${k}`} /></td>
               ))}
             </tr>

@@ -68,7 +68,7 @@ export default function SettingsPage() {
   const rotate = async () => { const { data } = await api.post("/settings/rotate-webhook-token"); load(data); toast.success("Webhook token rotated"); };
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-6xl">
       <div className="flex flex-wrap items-end justify-between gap-4 pb-2">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-widest text-blue-400">Admin · Supervisor</p>
@@ -170,7 +170,7 @@ export default function SettingsPage() {
         </div>
       </Section>
 
-      <Section title="Compliance" desc="Do-Not-Call suppression and calling window (CRTC-style). Applied at import and dial time." testId="settings-compliance-section">
+      <Section title="Compliance" desc="Do-Not-Call suppression and calling window (TRAI / DND-style). Applied at import and dial time." testId="settings-compliance-section">
         <Field label="Default phone region" hint="ISO country code used to parse numbers without a +country prefix.">
           <Input className="w-32 font-mono uppercase" value={s.default_region} onChange={set("default_region")} data-testid="settings-region-input" />
         </Field>

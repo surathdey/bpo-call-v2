@@ -287,8 +287,11 @@ Respond with JSON: {{"disposition": "<code>", "confidence": 0.0-1.0, "summary": 
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"rpi-{uuid.uuid4()}",
                    system_message=system).with_model("anthropic", "claude-sonnet-4-5-20250929")
     reply = await chat.send_message(UserMessage(text=prompt))
-    match = re.search(r"\{.*\}", reply or "", re.DOTALL)
-    data = json.loads(match.group(0)) if match else {}
+    start = (reply or "").find("{")
+    try:
+        data = json.JSONDecoder().raw_decode(reply[start:])[0] if start >= 0 else {}
+    except ValueError:
+        data = {}
     if data.get("disposition") not in codes:
         raise ValueError(f"Unparseable LLM reply: {reply[:200] if reply else ''}")
     return {"disposition": data["disposition"], "confidence": float(data.get("confidence", 0.5)),
@@ -307,7 +310,7 @@ async def classify_call(settings, turns: list, variables: dict, language: str, e
                 "classification": {"source": source, "confidence": conf, "ai_classified": source in ("llm", "agent"),
                                    "reasoning": reasoning, "raw_disposition": raw}}
 
-    if status != "completed":
+    if status != "completed" and agent_disposition not in dmap:
         return out(unreached, f"Call not connected ({status}).", False, "provider", 1.0,
                    f"Provider status '{ended_reason or 'no customer speech'}' -> {status}", unreached)
     rules = rule_classify(turns, variables["customer_name"], unreached)

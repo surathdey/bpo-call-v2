@@ -25,7 +25,22 @@ AI outbound calling module for BPO teams that checks Right Party Identification 
 - Settings: Vapi API key stored encrypted (Fernet, only last4 returned), phone number ID, voice profiles per language × gender, retries, DNC, calling hours, connection test
 - Retry (by disposition or selected contacts; confirmed contacts are excluded), CSV export, audit log
 
+
+## v2 change request (2026-06) — India collections
+- Exactly 3 voice profiles (en-IN, bn-IN, hi-IN). Each has female/male ElevenLabs voice IDs, a TTS model (turbo_v2_5 / v3 / multilingual_v2) and an STT (deepgram nova-3 en/bn/hi). French/US profiles removed
+- Campaign-level agent_name (required); settings default_agent_name prefills it. The old company name and "RevLoop" spoken text are removed
+- CSV has 4 columns: phone_number, name, bank_name, state/province. Rows missing phone_number or bank_name are rejected, with per-row errors shown before import
+- Intro and closing scripts per language are admin-editable, using {{agent_name}}, {{bank_name}} and {{customer_name}}
+- State→language rules are editable (default: West Bengal→Bengali, fallback Hindi) and applied at dial time
+- 8 canonical dispositions with editable category, rule and closing line. Unreached calls use a configurable bucket (default "Final Denial Closing"); Call Status is kept separately
+- The agent picks the disposition via a Vapi `file_disposition` tool, with analysisPlan structuredData as backup. Claude provides the summary and a fallback classification
+- Emotion/tone guidelines plus ElevenLabs stability/style settings
+- Export has the 14 spreadsheet columns: Transcript as JSON, Recording as /api/recordings/{attempt_id} (proxy stream)
+- The dashboard shows counts for all 8 buckets, per campaign and overall
+- On startup, legacy settings and dispositions are migrated
+
 ## Backlog
+- P1: Move recordings to AWS S3
 - P1: Secondary RPI check (last name / DOB fragment)
 - P1: Scheduled callback slots for confirmed parties; real live-transfer later
 - P1: Auth/RBAC for supervisors vs operators

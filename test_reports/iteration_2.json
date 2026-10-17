@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the v2 change request end to end in SIMULATION mode; live mode was never toggled and test-vapi was never called. Backend: 20/20 pytest pass (tests/test_rpi_v2.py). These cover settings validation (duplicate state rule, invalid language, opening without {{agent_name}}, voice-profile count), agent_name required (422), all 3 scripts containing the agent name, CSV 4-column validation (Missing phone_number / Missing bank_name / header errors / import 400), West Bengal case-insensitive -> bn-IN and others -> hi-IN, a state rule changed after import applied at dial time (Maharashtra -> en-IN), simulation completing with the 8 canonical dispositions, export with exactly the 14 columns plus JSON transcript plus the 'Final Denial Closing' filter, recordings 404, retry unreached / selected retry excluding RPC, and webhook tool-calls(file_disposition HOSTILE) -> end-of-call-report giving disposition HOSTILE with classification.source 'agent' and Recording link https://<base>/api/recordings/<attempt_id>. Frontend: Settings page (3 voice rows, edits persist after save + reload, state rule add/edit/delete, duplicate-rule error toast, fallback Hindi, 8 disposition rows, Bengali script tab, emotion textarea, no company field), create-campaign dialog (agent name required), script panel showing the agent in en/bn/hi, CSV dialog (header errors, invalid table with per-row errors, import 4 of 6), launch -> KPI grid with 10 cards and correct slug testids, disposition filter tabs incl. Final_Denial_Closing, filtered export download, call drawer (status, category, LLM summary, classifier reasoning, Bengali transcript), Retry unreached toast, and campaign-bucket-counts on the list. All passed. Settings were restored to defaults and TEST_ data was removed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "rpi_engine.llm_classify", "issue": "The greedy regex r'\\{.*\\}' + json.loads fails with 'Extra data' when the LLM reply contains trailing text or braces (seen once in backend.err.log). It then silently falls back to keyword rules. Fix: use json.JSONDecoder().raw_decode starting at the first '{'."},
+      {"endpoint": "rpi_engine.classify_call", "issue": "The agent's file_disposition is ignored whenever call_status != 'completed' (e.g. a live call where no customer turns were parsed, or an endedReason containing the broad FAILED_MARKERS 'number'/'error'). Such calls are forced to unreached_disposition. Consider trusting agent_disposition when the agent actually filed one."},
+      {"endpoint": "POST /api/vapi/webhook (tool-calls)", "issue": "A tool call with an unknown function name returns 'Invalid disposition' instead of an unknown-tool message (cosmetic)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings > Voice profiles", "issues": ["At 1920px the table is clipped on the right (STT language column cut off); voice-ID inputs are truncated at about 110px."]},
+      {"screen": "Settings > Compliance", "issues": ["The description says 'CRTC-style' (a Canadian regulator), which does not fit this India-focused product; it should say TRAI/DND."]},
+      {"screen": "Campaign export", "issues": ["The downloaded filename contains spaces when the filter is 'Final Denial Closing' (rpi_<name>_Final Denial Closing.csv); the backend already replaces spaces with underscores but the frontend overrides a.download."]},
+      {"screen": "Global header", "issues": ["The 'RevLoop' brand is still shown in the sidebar and FastAPI title. It is not the agent name (that part is correctly configurable), but confirm the brand is intended."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_rpi_v2.py", "/app/test_reports/pytest/pytest_v2.xml"],
+  "action_items": [
+    "Make llm_classify JSON extraction robust (raw_decode / non-greedy parse) so a slightly malformed LLM reply does not drop to keyword rules",
+    "Optional: honour agent_disposition in classify_call even when call_status is not 'completed' for live calls",
+    "Optional: fix voice-profiles table overflow, the 'CRTC-style' copy and the export filename spaces"
+  ],
+  "critical_code_review_comments": [
+    "/api/recordings proxies any stored recording_url (SSRF surface if the webhook token leaks); consider restricting to the Vapi/storage host allowlist",
+    "pytest.ini enforces '-n auto'; test_rpi_v2.py mutates global settings, so run it with '-n 0' (a parallel run caused a state-rule race)",
+    "In the export, the 'Call Status' column holds the contact status (pending/queued) for never-dialed rows; acceptable, but document it"
+  ],
+  "updated_files": ["/app/backend/tests/test_rpi_v2.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "TEST_ campaigns/contacts/attempts (including one fake live attempt with provider_call_id test-xyz-*) were created and then deleted. Settings were restored (state rules [West Bengal->bn-IN], fallback hi-IN, default emotion, stt nova-3, call_mode simulation).",
+  "test_credentials": "No auth; /app/memory/test_credentials.md is empty (expected). Webhook token is read from mongo settings.",
+  "playbook_testing": "There is no 'Jev' route in this app (grep found none), so the playbook check is N/A.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=... pytest tests/test_rpi_v2.py -n 0. NEVER switch call_mode to live (a real Vapi key is saved). The old tests/test_rpi_api.py is obsolete (v1 dispositions). Simulated outcomes are random; LLM (claude-sonnet-4-5) classification works, about 5-8s per call."
+}
