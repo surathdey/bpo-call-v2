@@ -22,7 +22,8 @@ load_dotenv(ROOT_DIR / ".env")
 
 from models import (DISPOSITIONS, UNREACHED_STATUSES, AuditLog, CallAttempt, Campaign, CampaignCreate,  # noqa: E402
                     CampaignUpdate, Contact, RetryRequest, Settings, SettingsUpdate, now_iso)
-from defaults import LEGACY_DISPOSITION_MAP, LEGACY_VOICE_IDS, SCRIPT_KEYS  # noqa: E402
+from defaults import (CALLBACK_PROMISE_MARKERS, DEFAULT_SCRIPTS, LEGACY_DISPOSITION_MAP,  # noqa: E402
+                      LEGACY_VOICE_IDS, SCRIPT_KEYS)
 from rpi_engine import (LANGUAGES, build_system_prompt, normalize_phone, resolve_language, sanitize_prompt,  # noqa: E402
                         script_lines, validate_csv)
 import call_service as cs  # noqa: E402
@@ -118,6 +119,11 @@ def validate_settings_changes(changes: dict):
         raise HTTPException(400, "Invalid closing line key")
     if changes.get("unreached_disposition") not in (None, *DISPOSITIONS):
         raise HTTPException(400, "unreached_disposition must be a canonical disposition")
+    if "pronunciation_overrides" in changes:
+        for o in changes["pronunciation_overrides"]:
+            o["name"], o["spoken"] = o["name"].strip(), o["spoken"].strip()
+            if o["language"] not in langs or not o["name"] or not o["spoken"]:
+                raise HTTPException(400, f"Invalid pronunciation override: {o}")
     if "script_templates" in changes:
         if set(changes["script_templates"]) - langs:
             raise HTTPException(400, "Script templates only for en-IN, bn-IN, hi-IN")
@@ -163,6 +169,16 @@ async def rotate_webhook_token():
     await db.settings.update_one({"_id": "global"}, {"$set": {"webhook_token": secrets.token_urlsafe(24)}}, upsert=True)
     await cs.audit(db, "webhook_token_rotated", "settings", "global")
     return public_settings(await cs.get_settings(db))
+
+
+@api.post("/settings/preview-name")
+async def preview_name(body: dict):
+    s = await cs.get_settings(db)
+    lang = body.get("language")
+    if lang not in LANGUAGES or not str(body.get("name", "")).strip():
+        raise HTTPException(400, "name and a valid language are required")
+    probe = Contact(id=str(ObjectId()), campaign_id="", name=str(body["name"]), phone="", language=lang)
+    return {"name": probe.name, "language": lang, "spoken": await cs.spoken_name(db, s, probe)}
 
 
 @api.post("/settings/test-vapi")
@@ -543,6 +559,14 @@ async def migrate_legacy():
         fix["default_region"] = "IN"
     if doc.get("calling_timezone") == "America/Toronto":
         fix["calling_timezone"] = "Asia/Kolkata"
+    if doc.get("unreached_disposition") in LEGACY_DISPOSITION_MAP:
+        fix["unreached_disposition"] = LEGACY_DISPOSITION_MAP[doc["unreached_disposition"]]
+    if any(d.get("code") in LEGACY_DISPOSITION_MAP for d in doc.get("dispositions") or []):
+        fix["dispositions"] = [{**d, "code": LEGACY_DISPOSITION_MAP.get(d["code"], d["code"])} for d in doc["dispositions"]]
+    templates = doc.get("script_templates") or {}
+    for lang, lines in templates.items():
+        if any(m in (lines.get("confirmed_close") or "") for m in CALLBACK_PROMISE_MARKERS):
+            fix[f"script_templates.{lang}.confirmed_close"] = DEFAULT_SCRIPTS[lang]["confirmed_close"]
     if fix or unset:
         await db.settings.update_one({"_id": "global"}, {"$set": fix, **({"$unset": unset} if unset else {})}, upsert=True)
     for old, new in LEGACY_DISPOSITION_MAP.items():

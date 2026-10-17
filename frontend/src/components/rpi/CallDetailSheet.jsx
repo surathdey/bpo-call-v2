@@ -50,6 +50,7 @@ const Attempt = ({ a }) => (
       <Row k="Call status" mono v={a.call_status} testId="attempt-call-status" />
       <Row k="Category" v={a.category} testId="attempt-category" />
       <Row k="Agent" v={`${a.agent_name} · ${a.language}`} />
+      {a.spoken_name && a.spoken_name !== a.customer_name && <Row k="Spoken name" v={a.spoken_name} testId="attempt-spoken-name" />}
       <Row k="Provider status" mono v={a.provider_status} testId="attempt-provider-status" />
       <Row k="Ended reason" mono v={a.ended_reason} testId="attempt-ended-reason" />
       <Row k="Created" v={fmtTime(a.created_at)} />

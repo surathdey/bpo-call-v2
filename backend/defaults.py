@@ -1,7 +1,7 @@
 """Factory defaults for admin-editable settings. Everything here is overridable from the admin console."""
 
 DISPOSITION_CODES = ["RPC_CONFIRMED", "CPC_CONFIRMED", "CALLBACK_REQUESTED", "FINAL_DENIAL",
-                     "Final Denial Closing", "HOSTILE", "DECEASED_CASE", "DNC_ESCALATION"]
+                     "FINAL_DENIAL_CLOSING", "HOSTILE", "DECEASED_CASE", "DNC_ESCALATION"]
 
 SCRIPT_KEYS = ["opening", "clarify", "confirmed_close", "cpc_close", "callback_close", "denial_close",
                "hostile_close", "deceased_close", "dnc_close"]
@@ -15,7 +15,7 @@ DEFAULT_DISPOSITIONS = [
      "description": "The callee is busy or asks to be called back later."},
     {"code": "FINAL_DENIAL", "category": "Wrong Party", "close": "denial_close",
      "description": "The callee clearly denies being {{customer_name}}, says wrong number, or does not know the customer."},
-    {"code": "Final Denial Closing", "category": "Not Verified", "close": "denial_close",
+    {"code": "FINAL_DENIAL_CLOSING", "label": "Final Denial Closing", "category": "Not Verified", "close": "denial_close",
      "description": "Identity could not be established: no clear answer after one clarification, silence, voicemail, no answer, or the call dropped."},
     {"code": "HOSTILE", "category": "Escalation", "close": "hostile_close",
      "description": "The callee is angry, abusive or threatening."},
@@ -57,7 +57,7 @@ DEFAULT_SCRIPTS = {
     "en-IN": {
         "opening": "Namaste, I am {{agent_name}} calling from {{bank_name}}. This is a recorded call. Am I speaking with {{customer_name}} ji?",
         "clarify": "Sorry, just to be sure — am I speaking with {{customer_name}} ji?",
-        "confirmed_close": "Thank you so much, {{customer_name}} ji. A representative from {{bank_name}} will call you back shortly. Have a wonderful day!",
+        "confirmed_close": "Thank you so much, {{customer_name}} ji. I was calling only to confirm your name. Have a wonderful day!",
         "cpc_close": "Thank you for confirming. Could you please let {{customer_name}} ji know that {{bank_name}} tried to reach them? Have a good day.",
         "callback_close": "Of course, no problem at all. We will call you back at a better time. Thank you!",
         "denial_close": "I'm so sorry for disturbing you. Thank you for your time, and have a good day.",
@@ -68,7 +68,7 @@ DEFAULT_SCRIPTS = {
     "hi-IN": {
         "opening": "नमस्ते, मेरा नाम {{agent_name}} है, यह कॉल {{bank_name}} की ओर से है। यह कॉल रिकॉर्ड की जा रही है। क्या मेरी बात {{customer_name}} जी से हो रही है?",
         "clarify": "माफ़ कीजिए, बस पक्का करना था — क्या मेरी बात {{customer_name}} जी से हो रही है?",
-        "confirmed_close": "बहुत-बहुत धन्यवाद, {{customer_name}} जी। {{bank_name}} से हमारे प्रतिनिधि जल्द ही आपको वापस कॉल करेंगे। आपका दिन शुभ हो!",
+        "confirmed_close": "बहुत-बहुत धन्यवाद, {{customer_name}} जी। आपका नाम कन्फ़र्म करने के लिए ही यह कॉल किया था। आपका दिन शुभ हो!",
         "cpc_close": "पुष्टि करने के लिए धन्यवाद। कृपया {{customer_name}} जी को बता दीजिए कि {{bank_name}} से कॉल आया था। धन्यवाद।",
         "callback_close": "बिल्कुल, कोई बात नहीं। हम आपको बाद में सही समय पर कॉल करेंगे। धन्यवाद!",
         "denial_close": "आपको परेशान करने के लिए माफ़ी चाहते हैं। आपके समय के लिए धन्यवाद।",
@@ -79,7 +79,7 @@ DEFAULT_SCRIPTS = {
     "bn-IN": {
         "opening": "নমস্কার, আমার নাম {{agent_name}}, আমি {{bank_name}} থেকে ফোন করছি। এই কলটি রেকর্ড করা হচ্ছে। আমি কি {{customer_name}} জি-র সাথে কথা বলছি?",
         "clarify": "মাফ করবেন, শুধু নিশ্চিত হতে চাইছি — আমি কি {{customer_name}} জি-র সাথে কথা বলছি?",
-        "confirmed_close": "অনেক ধন্যবাদ, {{customer_name}} জি। {{bank_name}} থেকে আমাদের একজন প্রতিনিধি শীঘ্রই আপনাকে ফোন করবেন। আপনার দিনটি ভালো কাটুক!",
+        "confirmed_close": "অনেক ধন্যবাদ, {{customer_name}} জি। আপনার নামটা কনফার্ম করার জন্যই কলটা করছিলাম। আপনার দিনটি ভালো কাটুক!",
         "cpc_close": "নিশ্চিত করার জন্য ধন্যবাদ। অনুগ্রহ করে {{customer_name}} জি-কে জানাবেন যে {{bank_name}} থেকে ফোন এসেছিল। ধন্যবাদ।",
         "callback_close": "অবশ্যই, কোনো সমস্যা নেই। আমরা পরে সুবিধাজনক সময়ে আপনাকে ফোন করব। ধন্যবাদ!",
         "denial_close": "বিরক্ত করার জন্য আমরা দুঃখিত। আপনার সময়ের জন্য ধন্যবাদ।",
@@ -90,4 +90,7 @@ DEFAULT_SCRIPTS = {
 }
 
 LEGACY_DISPOSITION_MAP = {"RPI_CONFIRMED": "RPC_CONFIRMED", "WRONG_PARTY": "FINAL_DENIAL",
-                          "NO_ANSWER_VOICEMAIL": "Final Denial Closing", "FAILED_NUMBER": "Final Denial Closing"}
+                          "NO_ANSWER_VOICEMAIL": "FINAL_DENIAL_CLOSING", "FAILED_NUMBER": "FINAL_DENIAL_CLOSING",
+                          "Final Denial Closing": "FINAL_DENIAL_CLOSING"}
+
+CALLBACK_PROMISE_MARKERS = ["representative", "प्रतिनिधि", "প্রতিনিধি"]

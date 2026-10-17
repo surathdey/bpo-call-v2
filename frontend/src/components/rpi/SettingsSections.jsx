@@ -67,6 +67,27 @@ export const StateRulesEditor = ({ rules, onChange }) => {
 
 export const FallbackLanguage = ({ value, onChange }) => <div className="w-48"><LangSelect value={value} onChange={onChange} testId="settings-fallback-language-select" /></div>;
 
+export const PronunciationEditor = ({ items, onChange, onPreview }) => {
+  const set = (i, k, v) => onChange(items.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
+  return (
+    <div className="space-y-2" data-testid="pronunciation-editor">
+      {items.map((o, i) => (
+        <div key={i} className="grid grid-cols-[1fr_150px_1fr_40px] gap-2" data-testid={`pron-row-${i}`}>
+          <Input className="h-8 text-xs" value={o.name} placeholder="Name or word as in CSV (e.g. Surath Dey / Dey)" onChange={(e) => set(i, "name", e.target.value)} data-testid={`pron-name-${i}`} />
+          <LangSelect value={o.language} onChange={(v) => set(i, "language", v)} testId={`pron-language-${i}`} />
+          <Input className="h-8 text-xs" value={o.spoken} placeholder="How to say it (e.g. সুরথ দে)" onChange={(e) => set(i, "spoken", e.target.value)} data-testid={`pron-spoken-${i}`} />
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-slate-500 hover:text-rose-400" onClick={() => onChange(items.filter((_, j) => j !== i))} data-testid={`pron-delete-${i}`}><Trash2 className="h-4 w-4" /></Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" className="gap-1.5 border-slate-700" onClick={() => onChange([...items, { name: "", language: "bn-IN", spoken: "" }])} data-testid="pron-add">
+          <Plus className="h-3.5 w-3.5" />Add pronunciation</Button>
+        {onPreview}
+      </div>
+    </div>
+  );
+};
+
 export const DispositionsEditor = ({ items, onChange }) => {
   const set = (i, k, v) => onChange(items.map((d, j) => (j === i ? { ...d, [k]: v } : d)));
   return (
@@ -76,7 +97,7 @@ export const DispositionsEditor = ({ items, onChange }) => {
         <tbody>
           {items.map((d, i) => (
             <tr key={d.code} className="border-t border-slate-800 align-top">
-              <td className="whitespace-nowrap p-2.5 font-mono text-[11px] text-slate-300">{d.code}<div className="text-[10px] text-slate-500">{dispositionLabel(d.code)}</div></td>
+              <td className="whitespace-nowrap p-2.5 font-mono text-[11px] text-slate-300" data-testid={`disposition-code-${i}`}>{d.code}<div className="text-[10px] text-slate-500">{d.label || dispositionLabel(d.code)}</div></td>
               <td className="p-1.5"><Input className="h-8 min-w-[130px] text-xs" value={d.category} onChange={(e) => set(i, "category", e.target.value)} data-testid={`disposition-category-${i}`} /></td>
               <td className="w-1/2 p-1.5"><Textarea rows={2} className="min-h-0 text-xs" value={d.description} onChange={(e) => set(i, "description", e.target.value)} data-testid={`disposition-description-${i}`} /></td>
               <td className="p-1.5">

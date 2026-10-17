@@ -8,7 +8,28 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, errMsg, DISPOSITIONS } from "@/lib/api";
-import { DispositionsEditor, FallbackLanguage, ScriptsEditor, StateRulesEditor, VoiceProfilesTable } from "@/components/rpi/SettingsSections";
+import { DispositionsEditor, FallbackLanguage, PronunciationEditor, ScriptsEditor, StateRulesEditor, VoiceProfilesTable } from "@/components/rpi/SettingsSections";
+
+const NamePreview = () => {
+  const [name, setName] = useState("Surath Dey");
+  const [lang, setLang] = useState("bn-IN");
+  const [out, setOut] = useState("");
+  const run = async () => {
+    try { const { data } = await api.post("/settings/preview-name", { name, language: lang }); setOut(data.spoken); }
+    catch (e) { toast.error(errMsg(e)); }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-800 bg-[#0B0F17] p-2">
+      <Input className="h-8 w-44 text-xs" value={name} onChange={(e) => setName(e.target.value)} data-testid="pron-preview-name" />
+      <Select value={lang} onValueChange={setLang}>
+        <SelectTrigger className="h-8 w-28 text-xs" data-testid="pron-preview-language"><SelectValue /></SelectTrigger>
+        <SelectContent><SelectItem value="bn-IN">Bengali</SelectItem><SelectItem value="hi-IN">Hindi</SelectItem><SelectItem value="en-IN">English</SelectItem></SelectContent>
+      </Select>
+      <Button size="sm" variant="secondary" onClick={run} data-testid="pron-preview-btn">Preview spoken name</Button>
+      {out && <span className="text-sm text-blue-300" data-testid="pron-preview-result">{out}</span>}
+    </div>
+  );
+};
 
 const Section = ({ title, desc, children, testId }) => (
   <section className="rise grid gap-6 border-b border-slate-800 py-8 lg:grid-cols-[280px_1fr]" data-testid={testId}>
@@ -136,6 +157,17 @@ export default function SettingsPage() {
       <Section title="State → language rule" desc="Each contact's state/province picks the call language. States not listed use the fallback." testId="settings-state-rules-section">
         <StateRulesEditor rules={s.state_language_rules} onChange={set("state_language_rules")} />
         <Field label="Fallback language (all other states)"><FallbackLanguage value={s.fallback_language} onChange={set("fallback_language")} /></Field>
+      </Section>
+
+      <Section title="Name pronunciation" desc="Customer names from the CSV are usually in English letters, which Bengali/Hindi voices mispronounce. The agent says the name in native script; add overrides for full names or single words." testId="settings-pronunciation-section">
+        <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+          <div>
+            <div className="text-sm text-slate-200">Auto-transliterate names to Bengali / Hindi script</div>
+            <div className="text-xs text-slate-500">AI spells the name as a native speaker says it. Overrides below always win.</div>
+          </div>
+          <Switch checked={s.auto_transliterate_names} onCheckedChange={set("auto_transliterate_names")} data-testid="settings-auto-transliterate-switch" />
+        </div>
+        <PronunciationEditor items={s.pronunciation_overrides || []} onChange={set("pronunciation_overrides")} onPreview={<NamePreview />} />
       </Section>
 
       <Section title="Script templates" desc="Intro and closing lines per language. Variables: {{agent_name}}, {{bank_name}}, {{customer_name}}." testId="settings-scripts-section">

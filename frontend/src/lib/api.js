@@ -10,7 +10,7 @@ export const errMsg = (e) => {
 };
 
 export const DISPOSITIONS = ["RPC_CONFIRMED", "CPC_CONFIRMED", "CALLBACK_REQUESTED", "FINAL_DENIAL",
-  "Final Denial Closing", "HOSTILE", "DECEASED_CASE", "DNC_ESCALATION"];
+  "FINAL_DENIAL_CLOSING", "HOSTILE", "DECEASED_CASE", "DNC_ESCALATION"];
 
 export const LANGUAGES = [
   { code: "en-IN", label: "English" },

@@ -11,7 +11,8 @@ from bson import ObjectId
 from cryptography.fernet import Fernet
 
 from models import AuditLog, CallAttempt, Campaign, Contact, Settings, now_iso
-from rpi_engine import build_system_prompt, classify_call, resolve_language, sanitize_name, script_lines
+from rpi_engine import (build_system_prompt, classify_call, is_latin, resolve_language, sanitize_name,
+                        script_lines, transliterate_name)
 
 logger = logging.getLogger(__name__)
 VAPI_BASE = "https://api.vapi.ai"
@@ -45,9 +46,33 @@ def resolve_voice(settings: Settings, campaign: Campaign, language: str) -> str:
     return vp.male_voice_id if campaign.voice_gender == "male" else vp.female_voice_id
 
 
-def call_variables(campaign: Campaign, contact: Contact) -> dict:
+def call_variables(campaign: Campaign, contact: Contact, spoken: str = "") -> dict:
     return {"agent_name": campaign.agent_name, "bank_name": contact.bank_name,
-            "customer_name": sanitize_name(contact.name), "state": contact.state}
+            "customer_name": spoken or sanitize_name(contact.name), "state": contact.state}
+
+
+async def spoken_name(db, settings: Settings, contact: Contact) -> str:
+    """Name as the TTS should say it: admin overrides first, then cached/auto native-script transliteration."""
+    name = sanitize_name(contact.name)
+    rules = [o for o in settings.pronunciation_overrides if o.language == contact.language]
+    full = next((o.spoken for o in rules if o.name.strip().lower() == name.lower()), None)
+    if full:
+        return full
+    words = {o.name.strip().lower(): o.spoken for o in rules}
+    result = " ".join(words.get(w.lower(), w) for w in name.split())
+    if not settings.auto_transliterate_names or not is_latin(result):
+        return result
+    cache_key = f"{contact.language}:{result}"
+    cached = contact.spoken_names.get(cache_key)
+    if cached:
+        return cached
+    try:
+        spoken = await transliterate_name(result, contact.language)
+    except Exception as exc:
+        logger.warning("Name transliteration failed for %s: %s", contact.id, exc)
+        return result
+    await db.contacts.update_one({"_id": ObjectId(contact.id)}, {"$set": {f"spoken_names.{cache_key}": spoken}})
+    return spoken
 
 
 def webhook_url(settings: Settings) -> str:
@@ -76,7 +101,7 @@ def voice_config(settings: Settings, vp, voice_id: str) -> dict:
 
 def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact, attempt: CallAttempt) -> dict:
     from models import DISPOSITIONS
-    variables = call_variables(campaign, contact)
+    variables = call_variables(campaign, contact, attempt.spoken_name)
     vp = voice_profile(settings, contact.language)
     prompt = campaign.prompt or settings.default_prompt
     hook = webhook_url(settings)
@@ -114,7 +139,7 @@ def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact,
     if hook:
         assistant["server"] = {"url": hook}
     return {"phoneNumberId": settings.phone_number_id,
-            "customer": {"number": contact.phone, "name": variables["customer_name"][:40]}, "assistant": assistant}
+            "customer": {"number": contact.phone, "name": sanitize_name(contact.name)[:40]}, "assistant": assistant}
 
 
 def parse_vapi_messages(messages: list) -> list:
@@ -233,11 +258,13 @@ async def run_simulated_call(db, attempt: CallAttempt, contact: Contact, lines: 
 # ---------- Placing calls ----------
 async def place_call(db, campaign: Campaign, contact: Contact, settings: Settings):
     contact.language = resolve_language(contact.state, settings.state_language_rules, settings.fallback_language)
-    variables = call_variables(campaign, contact)
+    spoken = await spoken_name(db, settings, contact)
+    variables = call_variables(campaign, contact, spoken)
     lines = script_lines(settings, contact.language, variables)
     live = settings.call_mode == "live"
     attempt = CallAttempt(campaign_id=campaign.id, contact_id=contact.id, attempt_number=contact.attempts,
-                          mode="live" if live else "simulation", customer_name=variables["customer_name"],
+                          mode="live" if live else "simulation", customer_name=sanitize_name(contact.name),
+                          spoken_name=spoken,
                           phone=contact.phone, bank_name=contact.bank_name, state=contact.state,
                           agent_name=campaign.agent_name, language=contact.language,
                           voice_id=resolve_voice(settings, campaign, contact.language),

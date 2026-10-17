@@ -5,7 +5,7 @@ const DISPO = {
   CPC_CONFIRMED: { label: "CPC Confirmed", cls: "bg-teal-500/10 border-teal-500/30 text-teal-300", dot: "bg-teal-400", text: "text-teal-300" },
   CALLBACK_REQUESTED: { label: "Callback", cls: "bg-sky-500/10 border-sky-500/30 text-sky-300", dot: "bg-sky-400", text: "text-sky-300" },
   FINAL_DENIAL: { label: "Final Denial", cls: "bg-rose-500/10 border-rose-500/30 text-rose-400", dot: "bg-rose-500", text: "text-rose-400" },
-  "Final Denial Closing": { label: "Final Denial Closing", cls: "bg-slate-500/10 border-slate-500/30 text-slate-300", dot: "bg-slate-400", text: "text-slate-300" },
+  FINAL_DENIAL_CLOSING: { label: "Final Denial Closing", cls: "bg-slate-500/10 border-slate-500/30 text-slate-300", dot: "bg-slate-400", text: "text-slate-300" },
   HOSTILE: { label: "Hostile", cls: "bg-orange-500/10 border-orange-500/30 text-orange-400", dot: "bg-orange-500", text: "text-orange-400" },
   DECEASED_CASE: { label: "Deceased", cls: "bg-violet-500/10 border-violet-500/30 text-violet-300", dot: "bg-violet-400", text: "text-violet-300" },
   DNC_ESCALATION: { label: "DNC Escalation", cls: "bg-amber-500/10 border-amber-500/30 text-amber-400", dot: "bg-amber-500", text: "text-amber-400" },
@@ -33,7 +33,7 @@ const Pill = ({ meta, testId, mono = true }) => (
 );
 
 export const DispositionBadge = ({ value, testId }) =>
-  value ? <Pill meta={DISPO[value] || { ...DISPO["Final Denial Closing"], label: value }} testId={testId} />
+  value ? <Pill meta={DISPO[value] || { ...DISPO.FINAL_DENIAL_CLOSING, label: value }} testId={testId} />
     : <span className="font-mono text-xs text-slate-600" data-testid={testId}>—</span>;
 
 export const StatusBadge = ({ value, testId }) => <Pill meta={STATUS[value] || STATUS.pending} testId={testId} />;

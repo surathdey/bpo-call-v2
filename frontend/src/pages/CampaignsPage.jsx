@@ -9,7 +9,7 @@ import { CampaignFormDialog } from "@/components/rpi/CampaignFormDialog";
 import { DISPOSITIONS } from "@/lib/api";
 
 const BAR_COLORS = { RPC_CONFIRMED: "bg-emerald-500", CPC_CONFIRMED: "bg-teal-400", CALLBACK_REQUESTED: "bg-sky-400",
-  FINAL_DENIAL: "bg-rose-500", "Final Denial Closing": "bg-slate-400", HOSTILE: "bg-orange-500", DECEASED_CASE: "bg-violet-400",
+  FINAL_DENIAL: "bg-rose-500", FINAL_DENIAL_CLOSING: "bg-slate-400", HOSTILE: "bg-orange-500", DECEASED_CASE: "bg-violet-400",
   DNC_ESCALATION: "bg-amber-500" };
 
 const Bar = ({ s }) => {

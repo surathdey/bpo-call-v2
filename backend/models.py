@@ -59,6 +59,7 @@ class Contact(BaseDocument):
     last_call_status: Optional[str] = None
     last_category: Optional[str] = None
     last_summary: Optional[str] = None
+    spoken_names: Dict[str, str] = {}
     disposition: Optional[str] = None
     review_required: bool = False
     attempts: int = 0
@@ -85,6 +86,7 @@ class CallAttempt(BaseDocument):
     attempt_number: int = 1
     mode: str = "simulation"
     customer_name: str = ""
+    spoken_name: str = ""
     phone: str = ""
     bank_name: str = ""
     state: str = ""
@@ -147,9 +149,16 @@ class StateRule(BaseModel):
 
 class DispositionDef(BaseModel):
     code: str
+    label: str = ""
     category: str = ""
     description: str = ""
     close: str = "denial_close"
+
+
+class PronunciationOverride(BaseModel):
+    name: str = Field(min_length=1)
+    language: str
+    spoken: str = Field(min_length=1)
 
 
 class Settings(BaseModel):
@@ -173,7 +182,9 @@ class Settings(BaseModel):
     voice_profiles: List[VoiceProfile] = Field(default_factory=lambda: [VoiceProfile(**v) for v in DEFAULT_VOICE_PROFILES])
     script_templates: Dict[str, Dict[str, str]] = Field(default_factory=lambda: {k: dict(v) for k, v in DEFAULT_SCRIPTS.items()})
     dispositions: List[DispositionDef] = Field(default_factory=lambda: [DispositionDef(**d) for d in DEFAULT_DISPOSITIONS])
-    unreached_disposition: str = "Final Denial Closing"
+    unreached_disposition: str = "FINAL_DENIAL_CLOSING"
+    auto_transliterate_names: bool = True
+    pronunciation_overrides: List[PronunciationOverride] = []
     max_retries: int = 2
     max_concurrent_calls: int = 3
     max_call_duration_seconds: int = 120
@@ -206,6 +217,8 @@ class SettingsUpdate(BaseModel):
     script_templates: Optional[Dict[str, Dict[str, str]]] = None
     dispositions: Optional[List[DispositionDef]] = None
     unreached_disposition: Optional[str] = None
+    auto_transliterate_names: Optional[bool] = None
+    pronunciation_overrides: Optional[List[PronunciationOverride]] = None
     max_retries: Optional[int] = Field(default=None, ge=0, le=10)
     max_concurrent_calls: Optional[int] = Field(default=None, ge=1, le=50)
     max_call_duration_seconds: Optional[int] = Field(default=None, ge=30, le=900)
