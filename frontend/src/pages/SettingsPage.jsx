@@ -27,6 +27,7 @@ const NamePreview = () => {
       </Select>
       <Button size="sm" variant="secondary" onClick={run} data-testid="pron-preview-btn">Preview spoken name</Button>
       {out && <span className="text-sm text-blue-300" data-testid="pron-preview-result">{out}</span>}
+      <span className="text-[11px] text-slate-500">Uses saved overrides — save settings to apply new rows.</span>
     </div>
   );
 };

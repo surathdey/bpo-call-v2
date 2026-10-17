@@ -45,7 +45,12 @@ AI outbound calling module for BPO teams that checks Right Party Identification 
 - Bengali: Azure bn-IN-TanishaaNeural / bn-IN-BashkarNeural, STT azure bn-IN
 - Each profile has a TTS provider setting (11labs or azure). Old placeholder voice IDs are migrated on startup
 
-## Backlog
+## Round 2 fixes (2026-10-17)
+- The confirmed_close lines (en/hi/bn) no longer promise a representative callback; they restate the purpose of the call instead. A hard prompt rule forbids callback promises outside CALLBACK_CLOSE. Stored templates were migrated
+- Name pronunciation: admin overrides (full name or single word, per language) are applied first. Otherwise Claude auto-transliterates the name into Bengali/Devanagari script (cached per contact). Only the spoken name is native script; the written name stays unchanged. Settings has a preview tool
+- Disposition code "Final Denial Closing" renamed to FINAL_DENIAL_CLOSING (label kept), with data migrated
+- Export checked: 14 columns, Transcript as JSON, working Recording link
+
 - P1: Move recordings to AWS S3
 - P1: Secondary RPI check (last name / DOB fragment)
 - P1: Scheduled callback slots for confirmed parties; real live-transfer later

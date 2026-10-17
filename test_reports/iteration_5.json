@@ -1,0 +1,25 @@
+{
+  "summary": "Read-only verification of the round-2 fixes in LIVE mode. No calls were placed, no settings were saved, no campaigns were launched, the call mode was not toggled and test_rpi_v2.py was not run. 28/28 pytest passed (16 new in test_round2_fixes.py plus 12 regression tests in test_recordings_voice.py). (1) bn-IN and hi-IN confirmed_close now carry the new purpose restatement. No confirmed_close in any language contains representative/प्रतिनिधि/প্রতিনিধি. prompt-preview for West Bengal returns bn-IN, and its system_prompt has the 'Never promise that a representative' rule and the new Bengali close. (2) Dispositions include FINAL_DENIAL_CLOSING with label 'Final Denial Closing', and unreached_disposition is FINAL_DENIAL_CLOSING. Mongo has 0 contacts and 0 call_attempts with 'Final Denial Closing'. (3) preview-name for 'Surath Dey' returns সুরথ দে for bn-IN, सुरथ डे for hi-IN and 'Surath Dey' unchanged for en-IN. Empty names and invalid languages return 400. spoken_name override logic: a word override gives 'Surath দে', a full-name override wins even with auto-transliteration on, and an override in a different language is ignored. (4) The export for both campaigns has exactly the 14 expected columns (with BOM). Category and Summary are filled for completed rows, Transcript parses as a JSON list, and the Recording link returns 200 audio/wav. (5) build_vapi_payload with spoken_name সুরথ দে puts it in firstMessage and in the system prompt, while customer.name stays 'Surath Dey'. UI: the pronunciation section, auto switch, editor row (pron-add/name/language/spoken) and preview (result সুরথ দে) all work. disposition-code-4 shows FINAL_DENIAL_CLOSING / Final Denial Closing. The script textareas show the new bn and hi text. The campaign KPI card shows 'Final Denial Closing 0', and the filter tab FINAL_DENIAL_CLOSING filters correctly. No page errors.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "GET /api/campaigns/{id}/prompt-preview", "issue": "Uses the raw ?name value instead of spoken_name(), so the preview shows 'Surath Dey' in the Bengali prompt while a real call would use 'সুরথ দে'. This is a preview/real-call mismatch only."}
+  ]},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [
+    {"screen": "/rpi/settings Name pronunciation", "issues": ["The preview widget calls the server with the SAVED settings, so pronunciation rows added but not yet saved are not reflected. Add a hint ('save to apply overrides') or send the draft overrides in the preview request."]}
+  ]},
+  "test_report_links": ["/app/backend/tests/test_round2_fixes.py", "/app/backend/tests/test_recordings_voice.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Optional: make prompt-preview use cs.spoken_name() (or a flag) so the preview matches the live prompt",
+    "Optional: let preview-name accept draft pronunciation_overrides, or show a 'save to apply' hint"
+  ],
+  "critical_code_review_comments": [
+    "place_call awaits an LLM transliteration call inline in the worker before each uncached contact. That adds LLM latency per dial, and with max_concurrent_calls > 1 the dials are serialized. Consider pre-transliterating at CSV import time.",
+    "The spoken_names cache is keyed by language and name per contact. It is not invalidated when the auto-transliterate setting is turned off, but overrides are checked first, so it is acceptable."
+  ],
+  "updated_files": ["/app/backend/tests/test_round2_fixes.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "none; nothing saved (pronunciation row typed in the UI only, not saved)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "LIVE Vapi mode. Run only tests/test_round2_fixes.py and tests/test_recordings_voice.py (read-only). Never run test_rpi_v2.py, never launch campaigns or save settings. Campaign 6ad2faad... has 1 contact (Surath Dey, state Bihar -> hi-IN, FINAL_DENIAL). The playbook 'Jev route' instruction does not apply: no such route exists in this app.",
+  "rca of the issue": "N/A - all requested fixes verified"
+}

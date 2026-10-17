@@ -267,7 +267,9 @@ async def prompt_preview(campaign_id: str, name: str = "Ramesh Kumar", bank: str
     s = await cs.get_settings(db)
     _, flags = sanitize_prompt(c.prompt)
     lang = resolve_language(state, s.state_language_rules, s.fallback_language)
-    variables = {"agent_name": c.agent_name, "bank_name": bank, "customer_name": name, "state": state}
+    probe = Contact(id=str(ObjectId()), campaign_id="", name=name, phone="", language=lang)
+    variables = {"agent_name": c.agent_name, "bank_name": bank, "customer_name": await cs.spoken_name(db, s, probe),
+                 "state": state}
     return {"language": lang, "system_prompt": build_system_prompt(s, lang, variables, c.prompt), "flags": flags}
 
 
