@@ -34,7 +34,7 @@ DEFAULT_VOICE_PROFILES = [
      "female_voice_id": "611e0Wo6wEi3GcpkO5it", "female_voice_name": "Ananya — Kolkata Bengali, polite & firm",
      "male_voice_id": "GuSivqtqi1qfWxEuGhqa", "male_voice_name": "Dipankar — Bengali, natural & calm",
      "stt_provider": "azure", "stt_model": "", "stt_language": "bn-IN"},
-    {"language": "hi-IN", "label": "Hindi", "tts_provider": "11labs", "tts_model": "eleven_turbo_v2_5",
+    {"language": "hi-IN", "label": "Hindi", "tts_provider": "11labs", "tts_model": "eleven_v3",
      "female_voice_id": "1qEiC6qsybMkmnNdVMbK", "female_voice_name": "Monika Sogam — Hindi, calm & natural",
      "male_voice_id": "zT03pEAEi0VHKciJODfn", "male_voice_name": "Raju — Hindi, clear, natural & warm",
      "stt_provider": "deepgram", "stt_model": "nova-3", "stt_language": "hi"},

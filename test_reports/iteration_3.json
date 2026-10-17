@@ -1,0 +1,19 @@
+{
+  "summary": "Read-only check of the recording replay fix and the ElevenLabs Bengali voices. No campaigns were launched or retried and no settings were saved. Backend: 6/6 pytest tests pass. GET /api/recordings/6ad2fac617b693b316bc6370 returns 200 audio/wav, 1,335,724 bytes, RIFF header. Attempt 6ad2fa4e17b693b316bc6364 also returns 200. An invalid id, a nonexistent id and an attempt with no recording each return 404. GET /api/settings shows Bengali with 11labs, eleven_v3, female 611e0Wo6wEi3GcpkO5it (Ananya) and male GuSivqtqi1qfWxEuGhqa (Dipankar). Frontend: in both drawers the audio element has the correct src, readyState 4 and a finite duration (41.74s for Test4/6ad2fac217b693b316bc636d, 32.82s for 6ad2fa4817b693b316bc6361). play() did not throw, and currentTime advanced to about 1.4s. Settings shows the Bengali row with ElevenLabs and the correct voice IDs and model. On both campaigns script-bn-IN shows Ananya. All campaigns are female, so Dipankar could not be checked on a campaign page.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "/api/recordings/{id}", "issue": "The response sends 'Accept-Ranges: none' and loads the whole file from Vapi on every request. The ingress also replaces the Cache-Control header with no-store. Seeking may restart the download and every replay calls Vapi again. Consider caching the bytes or supporting Range requests."}
+  ]},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_recordings_voice.py", "/app/test_reports/pytest/pytest_recordings.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "get_recording returns 502 when the provider fails. This is fine, but the UI audio element shows no error state when loading fails. Consider an onError fallback message.",
+    "Optional: cache the recording bytes, because each play or seek calls the Vapi mono-recording endpoint again."
+  ],
+  "updated_files": ["/app/backend/tests/test_recordings_voice.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_recordings_voice.py is read-only and safe in LIVE mode. Do NOT run test_rpi_v2.py, because it launches campaigns. All existing campaigns are female, so the Dipankar name on a campaign page could not be checked. The playbook 'Jev route' instruction does not apply: the app has no such route."
+}
