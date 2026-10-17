@@ -37,7 +37,7 @@ export const VoiceProfilesTable = ({ profiles, onChange }) => {
                 </Select>
               </td>
               {cols.map(([k]) => (
-                <td key={k} className="p-1.5"><Input className={`${cell} ${k.includes("voice") ? "min-w-[200px]" : "min-w-[90px]"}`} value={p[k] || ""} onChange={(e) => set(i, k, e.target.value)}
+                <td key={k} className="p-1.5"><Input className={`${cell} ${k.includes("voice") ? "min-w-[200px]" : k === "tts_model" ? "min-w-[170px]" : "min-w-[90px]"}`} value={p[k] || ""} onChange={(e) => set(i, k, e.target.value)}
                   data-testid={`voice-${p.language}-${k}`} /></td>
               ))}
             </tr>
