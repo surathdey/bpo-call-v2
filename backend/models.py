@@ -129,9 +129,12 @@ class AuditLog(BaseDocument):
 class VoiceProfile(BaseModel):
     language: str
     label: str
+    tts_provider: str = "11labs"  # 11labs | azure
     female_voice_id: str = ""
+    female_voice_name: str = ""
     male_voice_id: str = ""
-    tts_model: str = "eleven_multilingual_v2"
+    male_voice_name: str = ""
+    tts_model: str = ""
     stt_provider: str = "deepgram"
     stt_model: str = "nova-3"
     stt_language: str = ""

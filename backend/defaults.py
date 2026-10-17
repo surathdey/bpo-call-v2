@@ -26,13 +26,21 @@ DEFAULT_DISPOSITIONS = [
 ]
 
 DEFAULT_VOICE_PROFILES = [
-    {"language": "en-IN", "label": "English", "female_voice_id": "21m00Tcm4TlvDq8ikWAM", "male_voice_id": "pNInz6obpgDQGcFmaJgB",
-     "tts_model": "eleven_turbo_v2_5", "stt_provider": "deepgram", "stt_model": "nova-3", "stt_language": "en"},
-    {"language": "bn-IN", "label": "Bengali", "female_voice_id": "21m00Tcm4TlvDq8ikWAM", "male_voice_id": "pNInz6obpgDQGcFmaJgB",
-     "tts_model": "eleven_v3", "stt_provider": "deepgram", "stt_model": "nova-3", "stt_language": "bn"},
-    {"language": "hi-IN", "label": "Hindi", "female_voice_id": "21m00Tcm4TlvDq8ikWAM", "male_voice_id": "pNInz6obpgDQGcFmaJgB",
-     "tts_model": "eleven_multilingual_v2", "stt_provider": "deepgram", "stt_model": "nova-3", "stt_language": "hi"},
+    {"language": "en-IN", "label": "English", "tts_provider": "11labs", "tts_model": "eleven_turbo_v2_5",
+     "female_voice_id": "90ipbRoKi4CpHXvKVtl0", "female_voice_name": "Anika — Indian English, customer care",
+     "male_voice_id": "pzxut4zZz4GImZNlqQ3H", "male_voice_name": "Raju — Indian English, natural conversational",
+     "stt_provider": "deepgram", "stt_model": "nova-3", "stt_language": "en"},
+    {"language": "bn-IN", "label": "Bengali", "tts_provider": "azure", "tts_model": "",
+     "female_voice_id": "bn-IN-TanishaaNeural", "female_voice_name": "Tanishaa — native Bengali (India)",
+     "male_voice_id": "bn-IN-BashkarNeural", "male_voice_name": "Bashkar — native Bengali (India)",
+     "stt_provider": "azure", "stt_model": "", "stt_language": "bn-IN"},
+    {"language": "hi-IN", "label": "Hindi", "tts_provider": "11labs", "tts_model": "eleven_turbo_v2_5",
+     "female_voice_id": "1qEiC6qsybMkmnNdVMbK", "female_voice_name": "Monika Sogam — Hindi, calm & natural",
+     "male_voice_id": "zT03pEAEi0VHKciJODfn", "male_voice_name": "Raju — Hindi, clear, natural & warm",
+     "stt_provider": "deepgram", "stt_model": "nova-3", "stt_language": "hi"},
 ]
+
+LEGACY_VOICE_IDS = {"21m00Tcm4TlvDq8ikWAM", "pNInz6obpgDQGcFmaJgB"}
 
 DEFAULT_STATE_RULES = [{"state": "West Bengal", "language": "bn-IN"}]
 

@@ -38,7 +38,7 @@ const ScriptPanel = ({ c }) => (
     <div className="grid gap-3 md:grid-cols-3">
       {Object.entries(c.scripts).map(([lang, s]) => (
         <div key={lang} data-testid={`script-${lang}`}>
-          <div className="mb-1 font-mono text-[10px] text-slate-500">{s.label} · {s.voice_id || "no voice id"}</div>
+          <div className="mb-1 font-mono text-[10px] text-slate-500">{s.label} · {s.voice_name || s.voice_id || "no voice id"}</div>
           <p className="text-slate-300">{s.opening}</p>
         </div>
       ))}

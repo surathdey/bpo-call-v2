@@ -39,6 +39,12 @@ AI outbound calling module for BPO teams that checks Right Party Identification 
 - The dashboard shows counts for all 8 buckets, per campaign and overall
 - On startup, legacy settings and dispositions are migrated
 
+## v2.1 (2026-06) Native voices
+- English: ElevenLabs Indian English voices Anika (90ipbRoKi4CpHXvKVtl0) and Raju (pzxut4zZz4GImZNlqQ3H)
+- Hindi: ElevenLabs Monika Sogam (1qEiC6qsybMkmnNdVMbK) and Raju (zT03pEAEi0VHKciJODfn), turbo_v2_5, STT deepgram nova-3 hi
+- Bengali: Azure bn-IN-TanishaaNeural / bn-IN-BashkarNeural, STT azure bn-IN
+- Each profile has a TTS provider setting (11labs or azure). Old placeholder voice IDs are migrated on startup
+
 ## Backlog
 - P1: Move recordings to AWS S3
 - P1: Secondary RPI check (last name / DOB fragment)

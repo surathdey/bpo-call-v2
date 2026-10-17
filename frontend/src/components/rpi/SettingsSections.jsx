@@ -19,18 +19,25 @@ const LangSelect = ({ value, onChange, testId }) => (
 
 export const VoiceProfilesTable = ({ profiles, onChange }) => {
   const set = (i, k, v) => onChange(profiles.map((p, j) => (j === i ? { ...p, [k]: v } : p)));
-  const cols = [["female_voice_id", "Female voice ID"], ["male_voice_id", "Male voice ID"], ["tts_model", "TTS model"],
+  const cols = [["female_voice_id", "Female voice ID"], ["female_voice_name", "Female voice name"],
+    ["male_voice_id", "Male voice ID"], ["male_voice_name", "Male voice name"], ["tts_model", "TTS model"],
     ["stt_provider", "STT provider"], ["stt_model", "STT model"], ["stt_language", "STT lang"]];
   return (
     <div className="thin-scroll overflow-x-auto rounded-lg border border-slate-800">
       <table className="w-full text-sm" data-testid="voice-profiles-table">
-        <thead className="bg-slate-900/80"><tr><TH>Profile</TH>{cols.map(([, l]) => <TH key={l}>{l}</TH>)}</tr></thead>
+        <thead className="bg-slate-900/80"><tr><TH>Profile</TH><TH>TTS provider</TH>{cols.map(([, l]) => <TH key={l}>{l}</TH>)}</tr></thead>
         <tbody>
           {profiles.map((p, i) => (
             <tr key={p.language} className="border-t border-slate-800">
               <td className="whitespace-nowrap p-2.5 text-xs font-medium text-slate-200">{p.label} <span className="font-mono text-slate-500">{p.language}</span></td>
+              <td className="p-1.5">
+                <Select value={p.tts_provider} onValueChange={(v) => set(i, "tts_provider", v)}>
+                  <SelectTrigger className="h-8 min-w-[110px] text-xs" data-testid={`voice-${p.language}-tts_provider`}><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="11labs">ElevenLabs</SelectItem><SelectItem value="azure">Azure Neural</SelectItem></SelectContent>
+                </Select>
+              </td>
               {cols.map(([k]) => (
-                <td key={k} className="p-1.5"><Input className={`${cell} ${k.endsWith("voice_id") ? "min-w-[190px]" : "min-w-[90px]"}`} value={p[k]} onChange={(e) => set(i, k, e.target.value)}
+                <td key={k} className="p-1.5"><Input className={`${cell} ${k.includes("voice") ? "min-w-[200px]" : "min-w-[90px]"}`} value={p[k] || ""} onChange={(e) => set(i, k, e.target.value)}
                   data-testid={`voice-${p.language}-${k}`} /></td>
               ))}
             </tr>

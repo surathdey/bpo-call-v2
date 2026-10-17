@@ -65,6 +65,15 @@ def within_calling_hours(settings: Settings) -> bool:
     return settings.calling_hours_start <= hour < settings.calling_hours_end
 
 
+def voice_config(settings: Settings, vp, voice_id: str) -> dict:
+    if vp.tts_provider == "11labs":
+        cfg = {"provider": "11labs", "voiceId": voice_id, "model": vp.tts_model,
+               "stability": settings.voice_stability, "similarityBoost": 0.75, "style": settings.voice_style}
+    else:
+        cfg = {"provider": vp.tts_provider, "voiceId": voice_id, "model": vp.tts_model}
+    return {k: v for k, v in cfg.items() if v not in ("", None)}
+
+
 def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact, attempt: CallAttempt) -> dict:
     from models import DISPOSITIONS
     variables = call_variables(campaign, contact)
@@ -90,9 +99,9 @@ def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact,
             "messages": [{"role": "system", "content": build_system_prompt(settings, contact.language, variables, prompt)}],
             "tools": [tool],
         },
-        "voice": {"provider": "11labs", "voiceId": attempt.voice_id, "model": vp.tts_model,
-                  "stability": settings.voice_stability, "similarityBoost": 0.75, "style": settings.voice_style},
-        "transcriber": {"provider": vp.stt_provider, "model": vp.stt_model, "language": vp.stt_language},
+        "voice": voice_config(settings, vp, attempt.voice_id),
+        "transcriber": {k: v for k, v in {"provider": vp.stt_provider, "model": vp.stt_model,
+                                          "language": vp.stt_language}.items() if v},
         "endCallFunctionEnabled": True,
         "maxDurationSeconds": settings.max_call_duration_seconds,
         "silenceTimeoutSeconds": 15,

@@ -112,7 +112,7 @@ export default function SettingsPage() {
         <Button variant="outline" className="gap-2 border-slate-700" onClick={test} data-testid="settings-test-vapi-btn"><PlugZap className="h-4 w-4" />Test Vapi connection</Button>
       </Section>
 
-      <Section title="Voice profiles" desc="Exactly three profiles: English, Bengali, Hindi. Each sets the ElevenLabs voice (TTS) and the transcriber (STT) so the agent speaks and understands that language." testId="settings-voices-section">
+      <Section title="Voice profiles" desc="Exactly three profiles: English, Bengali, Hindi. Each sets the voice (ElevenLabs or Azure Neural) and the transcriber so the agent speaks and understands that language." testId="settings-voices-section">
         <VoiceProfilesTable profiles={s.voice_profiles} onChange={set("voice_profiles")} />
         <div className="grid gap-4 md:grid-cols-4">
           <Field label="Default agent name" hint="Prefills new campaigns. Spoken as {{agent_name}}.">

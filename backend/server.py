@@ -22,7 +22,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from models import (DISPOSITIONS, UNREACHED_STATUSES, AuditLog, CallAttempt, Campaign, CampaignCreate,  # noqa: E402
                     CampaignUpdate, Contact, RetryRequest, Settings, SettingsUpdate, now_iso)
-from defaults import LEGACY_DISPOSITION_MAP, SCRIPT_KEYS  # noqa: E402
+from defaults import LEGACY_DISPOSITION_MAP, LEGACY_VOICE_IDS, SCRIPT_KEYS  # noqa: E402
 from rpi_engine import (LANGUAGES, build_system_prompt, normalize_phone, resolve_language, sanitize_prompt,  # noqa: E402
                         script_lines, validate_csv)
 import call_service as cs  # noqa: E402
@@ -224,6 +224,7 @@ async def get_campaign(campaign_id: str):
     _, flags = sanitize_prompt(c.prompt)
     variables = {"agent_name": c.agent_name or "{{agent_name}}", "bank_name": "{bank_name}", "customer_name": "{customer_name}"}
     scripts = {lang: {**script_lines(s, lang, variables), "voice_id": cs.resolve_voice(s, c, lang),
+                      "voice_name": getattr(cs.voice_profile(s, lang), f"{c.voice_gender}_voice_name", ""),
                       "label": LANGUAGES[lang]["label"]} for lang in LANGUAGES}
     return {**c.model_dump(), "stats": await campaign_stats(c.id), "prompt_flags": flags, "scripts": scripts,
             "state_rules": [r.model_dump() for r in s.state_language_rules], "fallback_language": s.fallback_language,
@@ -536,7 +537,9 @@ async def migrate_legacy():
     doc = await db.settings.find_one({"_id": "global"}) or {}
     unset = {k: "" for k in ("company_name", "default_language", "elevenlabs_model") if k in doc}
     fix = {}
-    if doc.get("voice_profiles") and "female_voice_id" not in doc["voice_profiles"][0]:
+    profiles = doc.get("voice_profiles") or []
+    if profiles and ("female_voice_id" not in profiles[0] or any(
+            p.get("female_voice_id") in LEGACY_VOICE_IDS or p.get("male_voice_id") in LEGACY_VOICE_IDS for p in profiles)):
         fix["voice_profiles"] = [v.model_dump() for v in Settings().voice_profiles]
     if doc.get("default_region") == "US":
         fix["default_region"] = "IN"
