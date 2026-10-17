@@ -1,0 +1,19 @@
+{
+  "summary": "READ-ONLY check of the webhook base URL fixes in PREVIEW (live Vapi, no saves or other changes). All 4 requested items pass. Settings webhook_base_url equals the preview origin, so no mismatch warning shows on load. Typing https://example.org makes the amber webhook-mismatch-warning appear with correct text. Clicking use-this-site-url-btn fills the field with the preview origin and the warning disappears. The origin with a trailing '/' also shows no warning. After a reload the stored value is unchanged (still the preview origin), which confirms nothing was saved; the only POSTs during the run were CDN/analytics beacons, none to the app's API. The export Recording links all start with https://identity-check-ops.preview.emergentagent.com/api/recordings/ and a link returns 200 audio/wav. Sending a spoofed X-Forwarded-Host through the public ingress had no effect (the ingress overwrites it). Settings regression: pronunciation editor, script templates (script-hi-IN-reverify), reset-scripts-btn (not clicked) and the voice profiles table with a voice-*-tts_provider column for en-IN, bn-IN and hi-IN all render. Production was not touched.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_webhook_base_readonly.py", "/app/test_reports/pytest/pytest_iter8.xml"],
+  "action_items": [
+    "PROD still needs the user/admin to open PROD /rpi/settings, click 'Use this site's URL' (or clear the field) and Save, so that PROD webhook_base_url points to PROD. This was not verified here (the run was read-only and production was off limits)."
+  ],
+  "critical_code_review_comments": [
+    "public_base() trusts x-forwarded-host/host whenever it is not localhost. This is safe behind the current ingress (a spoofed header was overwritten), but a direct backend hit with a crafted Host header could put arbitrary hosts in the CSV links. Consider an allowlist (e.g. PUBLIC_BASE_URL/webhook_base_url hosts).",
+    "The playbook asks for a 'Jev route' check, but the app has no such route (no 'jev' found in server.py), so it was not applicable."
+  ],
+  "updated_files": ["/app/backend/tests/test_webhook_base_readonly.py"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100%"},
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Live Vapi mode: stay read-only. Campaign 6ad2faad17b693b316bc636b has completed calls with recordings. test_webhook_base_readonly.py is safe to rerun. The remaining open item is the PROD webhook_base_url fix, which a user must save in PROD."
+}
