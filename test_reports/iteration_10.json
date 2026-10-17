@@ -1,0 +1,20 @@
+{
+  "summary": "Re-tested the vapi_webhook tool-calls fix, backend only. 17 of 17 tests pass: 10 new tests plus the 7 regression tests from iteration 9. The iteration 9 failure is fixed. A tool-calls message for an unknown call now returns results[0] with the matching toolCallId and a result containing 'closing line is spoken automatically'. Attempt and audit counts do not change, and the backend logs the warning 'Disposition for unknown call'. Arguments sent as a JSON string also work. An invalid disposition returns 'Invalid disposition'. A wrong tool name returns 'Unknown tool'. A bad token returns 401. With several tool calls, each toolCallId gets its own result. A status-update for an unknown call still returns {ok:true, ignored:'unknown call'}. For the known-attempt check, I did not touch live data. I inserted an isolated TEST_ attempt (finalized False) straight into Mongo, then deleted it and its audit rows afterwards. Matching by provider_call_id and by metadata.attempt_id both set agent_disposition and agent_summary, and exactly one agent_disposition_filed audit row was written. No real calls, launches, retries or settings saves were made. The review mentions a 'Jev' route check, but no such route exists in this app, so it does not apply.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/vapi/webhook (tool-calls)", "issue": "For a known but already finalized attempt, update_one matches nothing (it filters on finalized False), but cs.audit still logs agent_disposition_filed. The audit then shows a disposition that was never stored. Suggested fix: write the audit only when result.matched_count is greater than 0."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_webhook_toolcalls_iter10.py", "/app/backend/tests/test_closing_messages_readonly.py", "/app/test_reports/pytest/pytest_iter10.xml"],
+  "action_items": ["Optional: in vapi_webhook tool-calls, write the agent_disposition_filed audit only when update_one matched_count is greater than 0."],
+  "critical_code_review_comments": ["The tool-calls branch is now handled before the unknown-doc early return, and every toolCallId gets a result. This is correct.", "Audit is written even when the finalized filter turns the update into a no-op (see minor issue)."],
+  "updated_files": ["/app/backend/tests/test_webhook_toolcalls_iter10.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped)"},
+  "seed_data_creation": "A temporary TEST_ call_attempt (campaign_id TEST_campaign_iter10) was inserted and then deleted in fixture teardown, along with its audit rows.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "LIVE Vapi mode: never place calls or save settings. Read the webhook token from GET /api/settings webhook_url. The known-attempt tests use an isolated attempt inserted directly into Mongo.",
+  "test_credentials": "None needed. /app/memory/test_credentials.md has no credentials (header only)."
+}

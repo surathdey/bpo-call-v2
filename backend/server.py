@@ -498,10 +498,11 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
                     args = {}
             if fn.get("name") == "file_disposition" and args.get("disposition") in DISPOSITIONS:
                 if doc:
-                    await db.call_attempts.update_one({"_id": doc["_id"], "finalized": False}, {"$set": {
+                    res = await db.call_attempts.update_one({"_id": doc["_id"], "finalized": False}, {"$set": {
                         "agent_disposition": args["disposition"], "agent_summary": str(args.get("summary", ""))[:600]}})
-                    await cs.audit(db, "agent_disposition_filed", "call_attempt", str(doc["_id"]), doc["campaign_id"],
-                                   disposition=args["disposition"])
+                    if res.matched_count:
+                        await cs.audit(db, "agent_disposition_filed", "call_attempt", str(doc["_id"]),
+                                       doc["campaign_id"], disposition=args["disposition"])
                 else:
                     logger.warning("Disposition for unknown call %s (webhook may point at another environment)", call_id)
                 results.append({"toolCallId": tc.get("id"), "result": (
