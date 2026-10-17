@@ -13,7 +13,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
 
@@ -402,25 +402,23 @@ async def export_contacts(campaign_id: str, request: Request, disposition: Optio
 
 @api.get("/recordings/{attempt_id}")
 async def get_recording(attempt_id: str):
-    doc = await db.call_attempts.find_one({"_id": oid(attempt_id)}, {"recording_url": 1})
+    doc = await db.call_attempts.find_one({"_id": oid(attempt_id)}, {"recording_url": 1, "provider_call_id": 1, "mode": 1})
     if not doc or not doc.get("recording_url"):
         raise HTTPException(404, "Recording not available")
-    client_http = httpx.AsyncClient(timeout=60, follow_redirects=True)
-    upstream = await client_http.send(client_http.build_request("GET", doc["recording_url"]), stream=True)
-    if not upstream.is_success:
-        await upstream.aclose()
-        await client_http.aclose()
+    s = await cs.get_settings(db)
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as http:
+        # Vapi (HIPAA) stores recordings privately; the authenticated endpoint redirects to a short-lived signed URL
+        if doc.get("mode") == "live" and doc.get("provider_call_id") and s.vapi_api_key_encrypted:
+            r = await http.get(f"{cs.VAPI_BASE}/call/{doc['provider_call_id']}/mono-recording",
+                               headers={"Authorization": f"Bearer {cs.decrypt(s.vapi_api_key_encrypted)}"})
+        else:
+            r = await http.get(doc["recording_url"])
+    if not r.is_success or not r.headers.get("content-type", "").startswith("audio"):
+        logger.warning("Recording fetch failed for %s: HTTP %s", attempt_id, r.status_code)
         raise HTTPException(502, "Recording provider unavailable")
-
-    async def body():
-        try:
-            async for chunk in upstream.aiter_bytes():
-                yield chunk
-        finally:
-            await upstream.aclose()
-            await client_http.aclose()
-    return StreamingResponse(body(), media_type=upstream.headers.get("content-type", "audio/wav"),
-                             headers={"Content-Disposition": f'inline; filename="recording_{attempt_id}.wav"'})
+    return Response(content=r.content, media_type=r.headers.get("content-type", "audio/wav"),
+                    headers={"Content-Disposition": f'inline; filename="recording_{attempt_id}.wav"',
+                             "Accept-Ranges": "none", "Cache-Control": "private, max-age=300"})
 
 
 @api.get("/contacts/{contact_id}")
