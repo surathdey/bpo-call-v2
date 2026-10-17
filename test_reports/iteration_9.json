@@ -1,0 +1,29 @@
+{
+  "summary": "Read-only backend check of the deterministic closing-line fix. 7 of 8 tests pass. (1) cs.build_vapi_payload with real settings from local Mongo for en-IN, hi-IN (Delhi) and bn-IN (West Bengal): tools[0] is file_disposition with 8 request-complete messages (one per settings.dispositions code, conditions [{param:'disposition',operator:'eq',value:CODE}], role assistant, content == script_lines()[d.close]) plus 1 request-failed (denial_close). All 9 have endCallAfterSpokenEnabled true, contain no '{' or '}', and are not empty. CALLBACK_REQUESTED -> callback_close (en is exactly 'Of course, no problem at all. We will call you back at a better time. Thank you!'). RPC_CONFIRMED -> confirmed_close, which has no 'representative'. (2) The payload system prompt for hi and bn contains 'call `file_disposition` WITHOUT speaking first', '\"goodbye\"', '\"wait a minute\"', the voicemail rule 'end the call (do not file a disposition)' and 'do not call endCall'. (3) GET prompt-preview for campaign 6ad2faad17b693b316bc636b (Surath Dey / Tata Capital / West Bengal) returns 200, language bn-IN, includes the new rule 6, and has no unrendered {{ }}. (4) A webhook call with a bad token returns 401. (5) FAILED: POST /api/vapi/webhook tool-calls with the valid token and a non-existent attempt_id 000000000000000000000000 returns 200 {'ok':true,'ignored':'unknown call'} and no 'results'. The handler returns early on the unknown-attempt lookup (server.py lines 488-490), before it reaches the tool-calls branch. No attempt was modified. No calls were placed, no assistants were created and no settings were saved.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/vapi/webhook (tool-calls)", "issue": "When the attempt is unknown (no provider_call_id match and no valid metadata.attempt_id), the response is {'ok':true,'ignored':'unknown call'} with no 'results' array. The review expected results[0].result to contain 'closing line is spoken automatically', so this fails. Real-world effect: if Vapi receives a tool response with no results for that toolCallId, it can treat the call as failed. The request-failed fallback would then speak denial_close instead of the correct closing line, such as callback_close. Today this only happens for unmatched calls (for example dashboard or test calls, or a lookup race), but the fix is cheap: in server.py, move the tool-calls handling ahead of the unknown-doc early return, or return {'results':[{toolCallId, result:'Disposition recorded. The closing line is spoken automatically; do not say anything else.'}]} for unknown calls without writing to the DB."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_closing_messages_readonly.py", "/app/test_reports/pytest/pytest_iter9.xml"],
+  "action_items": [
+    "server.py vapi_webhook: for type == 'tool-calls', always return a results entry per toolCallId, even when the attempt is unknown. Skip only the DB writes. Without this, Vapi may fall back to request-failed and speak denial_close.",
+    "Optional prompt hardening in rpi_engine.build_system_prompt: the APPROVED LINES header says 'say them as written' and also lists every *_CLOSE line. Exclude the close keys from that list, or label them 'spoken automatically by the system - never say these yourself'. Otherwise the model may speak a close itself and Vapi then speaks it again (double close)."
+  ],
+  "critical_code_review_comments": [
+    "call_service.closing_messages: the request-failed message has no 'role' key while the request-complete messages have role 'assistant'. This is harmless per the main agent's 201 schema validation, but it is inconsistent.",
+    "closing_messages silently skips a disposition whose close key renders empty (lines.get(d.close) is falsy). In that case the request-complete count drops below the number of dispositions and Vapi says nothing for that code. Consider falling back to denial_close.",
+    "rpi_engine rule 5 (voicemail -> end the call) relies on the endCall tool, while rule 5 of the flow says 'do not call endCall'. Both are scoped correctly (voicemail vs disposition), but the wording could confuse the LLM. Consider 'except for voicemail' in flow step 5.",
+    "The 'Jev route' playbook instruction does not apply: there is no such route in this app (grep found nothing)."
+  ],
+  "updated_files": ["/app/backend/tests/test_closing_messages_readonly.py"],
+  "success_rate": {"backend": "87.5% (7/8)", "frontend": "N/A (skipped as requested)"},
+  "test_credentials": "none required; /app/memory/test_credentials.md is empty template",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Live Vapi mode: stay read-only (no launches, resumes or retries, no place_call, no Vapi assistant creation, no settings saves). Run tests/test_closing_messages_readonly.py with -n0 to see the printed closing lines. It builds payloads in-process from the local Mongo settings. No state maps to en-IN (fallback is not en-IN), so the en case forces the language directly. The webhook unknown-attempt test fails until server.py returns tool results for unknown calls.",
+  "rca of the issue": "Unknown-call early return: vapi_webhook looks up the attempt and returns {'ok':true,'ignored'} before checking msg.type. The tool-calls branch, which builds the 'results' list Vapi needs, is never reached for unmatched calls. Reproduce: POST /api/vapi/webhook?token=<valid> with message.type 'tool-calls', call.id 'x' and metadata.attempt_id '0'*24. Fix: handle tool-calls before the doc check and do DB writes only if doc exists."
+}

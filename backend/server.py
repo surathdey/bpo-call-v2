@@ -485,10 +485,6 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
     doc = await db.call_attempts.find_one(query) if query else None
     if not doc and meta_attempt and ObjectId.is_valid(meta_attempt):
         doc = await db.call_attempts.find_one({"_id": ObjectId(meta_attempt)})
-    if not doc:
-        logger.warning("Webhook for unknown call %s", call_id)
-        return {"ok": True, "ignored": "unknown call"}
-    attempt_id = str(doc["_id"])
     mtype = msg.get("type")
     if mtype == "tool-calls":
         results = []
@@ -501,10 +497,13 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
                 except ValueError:
                     args = {}
             if fn.get("name") == "file_disposition" and args.get("disposition") in DISPOSITIONS:
-                await db.call_attempts.update_one({"_id": doc["_id"], "finalized": False}, {"$set": {
-                    "agent_disposition": args["disposition"], "agent_summary": str(args.get("summary", ""))[:600]}})
-                await cs.audit(db, "agent_disposition_filed", "call_attempt", attempt_id, doc["campaign_id"],
-                               disposition=args["disposition"])
+                if doc:
+                    await db.call_attempts.update_one({"_id": doc["_id"], "finalized": False}, {"$set": {
+                        "agent_disposition": args["disposition"], "agent_summary": str(args.get("summary", ""))[:600]}})
+                    await cs.audit(db, "agent_disposition_filed", "call_attempt", str(doc["_id"]), doc["campaign_id"],
+                                   disposition=args["disposition"])
+                else:
+                    logger.warning("Disposition for unknown call %s (webhook may point at another environment)", call_id)
                 results.append({"toolCallId": tc.get("id"), "result": (
                     "Disposition recorded. The closing line is spoken automatically; do not say anything else.")})
             elif fn.get("name") != "file_disposition":
@@ -512,6 +511,10 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
             else:
                 results.append({"toolCallId": tc.get("id"), "result": "Invalid disposition; choose one from the list."})
         return {"results": results}
+    if not doc:
+        logger.warning("Webhook for unknown call %s", call_id)
+        return {"ok": True, "ignored": "unknown call"}
+    attempt_id = str(doc["_id"])
     if mtype == "status-update":
         if not doc.get("finalized"):
             await db.call_attempts.update_one({"_id": doc["_id"], "finalized": False},
