@@ -171,8 +171,12 @@ export default function SettingsPage() {
         <PronunciationEditor items={s.pronunciation_overrides || []} onChange={set("pronunciation_overrides")} onPreview={<NamePreview />} />
       </Section>
 
-      <Section title="Script templates" desc="Intro and closing lines per language. Variables: {{agent_name}}, {{bank_name}}, {{customer_name}}." testId="settings-scripts-section">
+      <Section title="Script templates" desc="Intro, re-verify and closing lines per language. Variables: {{agent_name}}, {{bank_name}}, {{customer_name}}." testId="settings-scripts-section">
         <ScriptsEditor templates={s.script_templates} onChange={set("script_templates")} />
+        <Button variant="outline" size="sm" className="border-slate-700" data-testid="reset-scripts-btn"
+          onClick={async () => { if (!window.confirm("Replace all script templates with the defaults?")) return;
+            const { data } = await api.post("/settings/reset-scripts"); load(data); toast.success("Scripts reset to defaults"); }}>
+          Reset scripts to defaults</Button>
       </Section>
 
       <Section title="Disposition buckets" desc="Eight canonical codes. The agent picks one per call using these rules; category feeds the export." testId="settings-dispositions-section">

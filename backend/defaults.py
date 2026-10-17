@@ -3,7 +3,7 @@
 DISPOSITION_CODES = ["RPC_CONFIRMED", "CPC_CONFIRMED", "CALLBACK_REQUESTED", "FINAL_DENIAL",
                      "FINAL_DENIAL_CLOSING", "HOSTILE", "DECEASED_CASE", "DNC_ESCALATION"]
 
-SCRIPT_KEYS = ["opening", "clarify", "confirmed_close", "cpc_close", "callback_close", "denial_close",
+SCRIPT_KEYS = ["opening", "clarify", "reverify", "confirmed_close", "cpc_close", "callback_close", "denial_close",
                "hostile_close", "deceased_close", "dnc_close"]
 
 DEFAULT_DISPOSITIONS = [
@@ -57,6 +57,7 @@ DEFAULT_SCRIPTS = {
     "en-IN": {
         "opening": "Namaste, I am {{agent_name}} calling from {{bank_name}}. This is a recorded call. Am I speaking with {{customer_name}} ji?",
         "clarify": "Sorry, just to be sure — am I speaking with {{customer_name}} ji?",
+        "reverify": "Our records show this number is registered under {{customer_name}} ji. Do you know them?",
         "confirmed_close": "Thank you so much, {{customer_name}} ji. I was calling only to confirm your name. Have a wonderful day!",
         "cpc_close": "Thank you for confirming. Could you please let {{customer_name}} ji know that {{bank_name}} tried to reach them? Have a good day.",
         "callback_close": "Of course, no problem at all. We will call you back at a better time. Thank you!",
@@ -68,6 +69,7 @@ DEFAULT_SCRIPTS = {
     "hi-IN": {
         "opening": "नमस्ते, मेरा नाम {{agent_name}} है, यह कॉल {{bank_name}} की ओर से है। यह कॉल रिकॉर्ड की जा रही है। क्या मेरी बात {{customer_name}} जी से हो रही है?",
         "clarify": "माफ़ कीजिए, बस पक्का करना था — क्या मेरी बात {{customer_name}} जी से हो रही है?",
+        "reverify": "हमारे रिकॉर्ड में यह नंबर {{customer_name}} जी के नाम पर दर्ज है। क्या आप उन्हें जानते हैं?",
         "confirmed_close": "बहुत-बहुत धन्यवाद, {{customer_name}} जी। आपका नाम कन्फ़र्म करने के लिए ही यह कॉल किया था। आपका दिन शुभ हो!",
         "cpc_close": "पुष्टि करने के लिए धन्यवाद। कृपया {{customer_name}} जी को बता दीजिए कि {{bank_name}} से कॉल आया था। धन्यवाद।",
         "callback_close": "बिल्कुल, कोई बात नहीं। हम आपको बाद में सही समय पर कॉल करेंगे। धन्यवाद!",
@@ -79,6 +81,7 @@ DEFAULT_SCRIPTS = {
     "bn-IN": {
         "opening": "নমস্কার, আমার নাম {{agent_name}}, আমি {{bank_name}} থেকে ফোন করছি। এই কলটি রেকর্ড করা হচ্ছে। আমি কি {{customer_name}} জি-র সাথে কথা বলছি?",
         "clarify": "মাফ করবেন, শুধু নিশ্চিত হতে চাইছি — আমি কি {{customer_name}} জি-র সাথে কথা বলছি?",
+        "reverify": "আমাদের রেকর্ডে এই নম্বরটি {{customer_name}} জি-র নামে নথিভুক্ত আছে। আপনি কি ওঁকে চেনেন?",
         "confirmed_close": "অনেক ধন্যবাদ, {{customer_name}} জি। আপনার নামটা কনফার্ম করার জন্যই কলটা করছিলাম। আপনার দিনটি ভালো কাটুক!",
         "cpc_close": "নিশ্চিত করার জন্য ধন্যবাদ। অনুগ্রহ করে {{customer_name}} জি-কে জানাবেন যে {{bank_name}} থেকে ফোন এসেছিল। ধন্যবাদ।",
         "callback_close": "অবশ্যই, কোনো সমস্যা নেই। আমরা পরে সুবিধাজনক সময়ে আপনাকে ফোন করব। ধন্যবাদ!",

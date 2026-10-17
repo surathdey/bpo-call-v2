@@ -107,7 +107,8 @@ def build_vapi_payload(settings: Settings, campaign: Campaign, contact: Contact,
     hook = webhook_url(settings)
     tool = {"type": "function", "async": False,
             "function": {"name": "file_disposition",
-                         "description": "File the final call disposition before ending the call.",
+                         "description": ("File the final call disposition. Call this only AFTER you have fully spoken "
+                                         "the closing line, then end the call."),
                          "parameters": {"type": "object", "required": ["disposition"], "properties": {
                              "disposition": {"type": "string", "enum": DISPOSITIONS},
                              "summary": {"type": "string", "description": "One-line English summary of the call"}}}}}

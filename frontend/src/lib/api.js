@@ -18,7 +18,7 @@ export const LANGUAGES = [
   { code: "hi-IN", label: "Hindi" },
 ];
 
-export const SCRIPT_KEYS = ["opening", "clarify", "confirmed_close", "cpc_close", "callback_close", "denial_close",
+export const SCRIPT_KEYS = ["opening", "clarify", "reverify", "confirmed_close", "cpc_close", "callback_close", "denial_close",
   "hostile_close", "deceased_close", "dnc_close"];
 
 export const recordingUrl = (attemptId) => `${process.env.REACT_APP_BACKEND_URL}/api/recordings/${attemptId}`;

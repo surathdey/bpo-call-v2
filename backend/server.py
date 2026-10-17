@@ -171,6 +171,14 @@ async def rotate_webhook_token():
     return public_settings(await cs.get_settings(db))
 
 
+@api.post("/settings/reset-scripts")
+async def reset_scripts():
+    await db.settings.update_one({"_id": "global"}, {"$set": {
+        "script_templates": {k: dict(v) for k, v in DEFAULT_SCRIPTS.items()}, "updated_at": now_iso()}}, upsert=True)
+    await cs.audit(db, "scripts_reset_to_defaults", "settings", "global")
+    return public_settings(await cs.get_settings(db))
+
+
 @api.post("/settings/preview-name")
 async def preview_name(body: dict):
     s = await cs.get_settings(db)
@@ -494,7 +502,9 @@ async def vapi_webhook(request: Request, token: Optional[str] = None):
                     "agent_disposition": args["disposition"], "agent_summary": str(args.get("summary", ""))[:600]}})
                 await cs.audit(db, "agent_disposition_filed", "call_attempt", attempt_id, doc["campaign_id"],
                                disposition=args["disposition"])
-                results.append({"toolCallId": tc.get("id"), "result": "Disposition recorded. Say the closing line and end the call."})
+                results.append({"toolCallId": tc.get("id"), "result": (
+                    "Disposition recorded. If you have not already spoken the closing line, speak it now in full; "
+                    "only after it has been spoken, end the call. Never hang up silently.")})
             elif fn.get("name") != "file_disposition":
                 results.append({"toolCallId": tc.get("id"), "result": f"Unknown tool '{fn.get('name')}'."})
             else:
@@ -567,8 +577,12 @@ async def migrate_legacy():
         fix["dispositions"] = [{**d, "code": LEGACY_DISPOSITION_MAP.get(d["code"], d["code"])} for d in doc["dispositions"]]
     templates = doc.get("script_templates") or {}
     for lang, lines in templates.items():
-        if any(m in (lines.get("confirmed_close") or "") for m in CALLBACK_PROMISE_MARKERS):
-            fix[f"script_templates.{lang}.confirmed_close"] = DEFAULT_SCRIPTS[lang]["confirmed_close"]
+        for key in ("confirmed_close", "cpc_close"):
+            if any(m in (lines.get(key) or "") for m in CALLBACK_PROMISE_MARKERS):
+                fix[f"script_templates.{lang}.{key}"] = DEFAULT_SCRIPTS[lang][key]
+        for key in SCRIPT_KEYS:
+            if key not in lines and lang in DEFAULT_SCRIPTS:
+                fix[f"script_templates.{lang}.{key}"] = DEFAULT_SCRIPTS[lang][key]
     if fix or unset:
         await db.settings.update_one({"_id": "global"}, {"$set": fix, **({"$unset": unset} if unset else {})}, upsert=True)
     for old, new in LEGACY_DISPOSITION_MAP.items():
